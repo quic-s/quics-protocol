@@ -22,3 +22,9 @@ go.work
 
 # Mac OS X specific files
 .DS_Store
+
+# devcontainer specific files
+.devcontainer
+
+# test file
+test/received.txt

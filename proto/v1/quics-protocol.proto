@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package protocol.v1;
+
+option go_package = ".;v1";
+
+message Header {
+    MessageType type = 1;
+    uint64 dataSize = 2;
+}
+
+enum MessageType {
+    UNKNOWN = 0;
+    FILE_INFO = 1;
+    MESSAGE = 2;
+    RESPONSE = 3;
+}
+
+message Message {
+    string type = 1;
+    bytes message = 2;
+}
+
+message FileInfo {
+    bytes hash = 1;
+    string path = 2;
+    uint64 size = 3;
+}
+
+message Response {
+    int32 status = 1;
+    string message = 2;
+}
