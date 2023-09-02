@@ -13,11 +13,11 @@ import (
 type Handler struct {
 	messageHandler     map[string]func(conn *qpConn.Connection, msgType string, data []byte)
 	fileHandler        map[string]func(conn *qpConn.Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader)
-	fileMessageHandler map[string]func(conn *qpConn.Connection, fileMsgType string, data []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)
+	fileMessageHandler map[string]func(conn *qpConn.Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)
 
 	defaultMessageHandler     func(conn *qpConn.Connection, msgType string, data []byte)
 	defaultFileHandler        func(conn *qpConn.Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader)
-	defaultFileMessageHandler func(conn *qpConn.Connection, fileMsgType string, data []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)
+	defaultFileMessageHandler func(conn *qpConn.Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)
 }
 
 func New() *Handler {
@@ -126,7 +126,7 @@ func (h *Handler) AddFileHandleFunc(fileType string, handler func(conn *qpConn.C
 	return nil
 }
 
-func (h *Handler) AddFileMessageHandleFunc(fileMsgType string, handler func(conn *qpConn.Connection, fileMsgType string, data []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
+func (h *Handler) AddFileMessageHandleFunc(fileMsgType string, handler func(conn *qpConn.Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	h.fileMessageHandler[fileMsgType] = handler
 	return nil
 }
@@ -141,7 +141,7 @@ func (h *Handler) DefaultFileHandleFunc(handler func(conn *qpConn.Connection, fi
 	return nil
 }
 
-func (h *Handler) DefaultFileMessageHandleFunc(handler func(conn *qpConn.Connection, fileMsgType string, data []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
+func (h *Handler) DefaultFileMessageHandleFunc(handler func(conn *qpConn.Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	h.defaultFileMessageHandler = handler
 	return nil
 }

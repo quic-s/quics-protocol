@@ -285,7 +285,7 @@ func (q *qp) RecvFileHandleFunc(fileType string, handler func(conn *qpConn.Conne
 	return nil
 }
 
-func (q *qp) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *qpConn.Connection, fileMsgType string, data []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
+func (q *qp) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *qpConn.Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	q.handler.AddFileMessageHandleFunc(fileMsgType, handler)
 	return nil
 }
@@ -300,7 +300,7 @@ func (q *qp) RecvFile(handler func(conn *qpConn.Connection, msgType string, data
 	return nil
 }
 
-func (q *qp) RecvFileMessage(handler func(conn *qpConn.Connection, msgType string, data []byte)) error {
+func (q *qp) RecvFileMessage(handler func(conn *qpConn.Connection, msgType string, msgData []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
 	return nil
 }
