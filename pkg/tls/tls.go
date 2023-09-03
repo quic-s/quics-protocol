@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"log"
 	"math/big"
 	"os"
 )
@@ -16,7 +15,6 @@ func GetCertificate(keyPath string, certPath string) ([]tls.Certificate, error) 
 	_, certErr := os.Stat(certPath)
 	cert, err := &tls.Certificate{}, error(nil)
 	if os.IsNotExist(keyErr) && os.IsNotExist(certErr) {
-		log.Println("quics-protocol: ", "generate ssl")
 		cert, err = GenerateSSL()
 		if err != nil {
 			return nil, err

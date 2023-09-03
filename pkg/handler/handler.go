@@ -63,9 +63,9 @@ func (h *Handler) RouteConnection(conn *qpConn.Connection) {
 				}
 
 				if _, exists := h.messageHandler[message.Type]; exists {
-					go h.messageHandler[message.Type](conn, message.Type, message.Data)
+					h.messageHandler[message.Type](conn, message.Type, message.Data)
 				} else {
-					go h.defaultMessageHandler(conn, message.Type, message.Data)
+					h.defaultMessageHandler(conn, message.Type, message.Data)
 				}
 			case pb.MessageType_FILE:
 				fileType, fileInfo, fileReader, err := conn.ReadFile()
@@ -79,9 +79,9 @@ func (h *Handler) RouteConnection(conn *qpConn.Connection) {
 				}
 
 				if _, exists := h.fileHandler[fileType]; exists {
-					go h.fileHandler[fileType](conn, fileType, fileInfo, fileReader)
+					h.fileHandler[fileType](conn, fileType, fileInfo, fileReader)
 				} else {
-					go h.defaultFileHandler(conn, fileType, fileInfo, fileReader)
+					h.defaultFileHandler(conn, fileType, fileInfo, fileReader)
 				}
 			case pb.MessageType_FILE_W_MESSAGE:
 				message, err := conn.ReadMessage()
@@ -105,9 +105,9 @@ func (h *Handler) RouteConnection(conn *qpConn.Connection) {
 				}
 
 				if _, exists := h.fileMessageHandler[message.Type]; exists {
-					go h.fileMessageHandler[message.Type](conn, message.Type, message.Data, fileInfo, fileReader)
+					h.fileMessageHandler[message.Type](conn, message.Type, message.Data, fileInfo, fileReader)
 				} else {
-					go h.defaultFileMessageHandler(conn, message.Type, message.Data, fileInfo, fileReader)
+					h.defaultFileMessageHandler(conn, message.Type, message.Data, fileInfo, fileReader)
 				}
 			default:
 				log.Println("quics-protocol: ", "unknown message type")

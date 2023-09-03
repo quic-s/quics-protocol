@@ -16,7 +16,7 @@ import (
 	pb "github.com/quic-s/quics-protocol/proto/v1"
 )
 
-type qp struct {
+type QP struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	quicConf     *quic.Config
@@ -25,7 +25,7 @@ type qp struct {
 	logLevel     int
 }
 
-func New(logLevel int) (*qp, error) {
+func New(logLevel int) (*QP, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	quicConf := &quic.Config{
 		MaxIdleTimeout:  30 * time.Second,
@@ -33,7 +33,7 @@ func New(logLevel int) (*qp, error) {
 	}
 	handler := qpHandler.New()
 
-	return &qp{
+	return &QP{
 		ctx:          ctx,
 		cancel:       cancel,
 		quicConf:     quicConf,
@@ -43,7 +43,7 @@ func New(logLevel int) (*qp, error) {
 	}, nil
 }
 
-func (q *qp) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*qpConn.Connection, error) {
+func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
@@ -72,7 +72,7 @@ func (q *qp) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*qpConn.Connection
 	return newConn, nil
 }
 
-func (q *qp) DialWithMessage(address *net.UDPAddr, tlsConf *tls.Config, msgType string, data []byte) (*qpConn.Connection, error) {
+func (q *QP) DialWithMessage(address *net.UDPAddr, tlsConf *tls.Config, msgType string, data []byte) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
@@ -106,7 +106,7 @@ func (q *qp) DialWithMessage(address *net.UDPAddr, tlsConf *tls.Config, msgType 
 	return newConn, nil
 }
 
-func (q *qp) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *qpConn.Connection)) error {
+func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *Connection)) error {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
@@ -176,7 +176,7 @@ func (q *qp) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(
 	}
 }
 
-func (q *qp) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *qpConn.Connection, msgType string, data []byte)) error {
+func (q *QP) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *Connection, msgType string, data []byte)) error {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
@@ -261,7 +261,7 @@ func (q *qp) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHa
 	}
 }
 
-func (q *qp) Close() error {
+func (q *QP) Close() error {
 	if q.quicListener != nil {
 		if q.logLevel <= LOG_LEVEL_INFO {
 			log.Println("quics-protocol: ", "Close quicListener")
@@ -275,32 +275,32 @@ func (q *qp) Close() error {
 	return nil
 }
 
-func (q *qp) RecvMessageHandleFunc(msgType string, handler func(conn *qpConn.Connection, msgType string, data []byte)) error {
+func (q *QP) RecvMessageHandleFunc(msgType string, handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.AddMessageHandleFunc(msgType, handler)
 	return nil
 }
 
-func (q *qp) RecvFileHandleFunc(fileType string, handler func(conn *qpConn.Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
+func (q *QP) RecvFileHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	q.handler.AddFileHandleFunc(fileType, handler)
 	return nil
 }
 
-func (q *qp) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *qpConn.Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
+func (q *QP) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	q.handler.AddFileMessageHandleFunc(fileMsgType, handler)
 	return nil
 }
 
-func (q *qp) RecvMessage(handler func(conn *qpConn.Connection, msgType string, data []byte)) error {
+func (q *QP) RecvMessage(handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
 	return nil
 }
 
-func (q *qp) RecvFile(handler func(conn *qpConn.Connection, msgType string, data []byte)) error {
+func (q *QP) RecvFile(handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
 	return nil
 }
 
-func (q *qp) RecvFileMessage(handler func(conn *qpConn.Connection, msgType string, msgData []byte)) error {
+func (q *QP) RecvFileMessage(handler func(conn *Connection, msgType string, msgData []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
 	return nil
 }
