@@ -27,4 +27,4 @@ go.work
 .devcontainer
 
 # test file
-test/received.txt
+test/received*

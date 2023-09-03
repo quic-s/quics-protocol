@@ -6,25 +6,24 @@ option go_package = ".;v1";
 
 message Header {
     MessageType type = 1;
-    uint64 dataSize = 2;
 }
 
 enum MessageType {
     UNKNOWN = 0;
-    FILE_INFO = 1;
+    FILE = 1;
     MESSAGE = 2;
-    RESPONSE = 3;
+    FILE_W_MESSAGE = 3;
+    RESPONSE = 4;
 }
 
 message Message {
     string type = 1;
-    bytes message = 2;
+    bytes data = 2;
 }
 
 message FileInfo {
-    bytes hash = 1;
-    string path = 2;
-    uint64 size = 3;
+    string type = 1;
+    bytes fileInfo = 2;
 }
 
 message Response {
