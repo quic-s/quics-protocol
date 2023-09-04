@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/quic-go/quic-go"
 	qpLog "github.com/quic-s/quics-protocol/pkg/log"
 	"github.com/quic-s/quics-protocol/pkg/utils/fileinfo"
@@ -16,10 +17,13 @@ import (
 )
 
 type Connection struct {
-	logLevel int
-	writeMut *sync.Mutex
-	Conn     quic.Connection
-	Stream   quic.Stream
+	logLevel            int
+	writeMut            *sync.Mutex
+	MsgResponseChan     map[string]chan []byte
+	FileResponseChan    map[string]chan []byte
+	FileMsgResponseChan map[string]chan []byte
+	Conn                quic.Connection
+	Stream              quic.Stream
 }
 
 func New(logLevel int, conn quic.Connection, stream quic.Stream) (*Connection, error) {
@@ -34,10 +38,13 @@ func New(logLevel int, conn quic.Connection, stream quic.Stream) (*Connection, e
 	}
 
 	return &Connection{
-		logLevel: logLevel,
-		writeMut: &sync.Mutex{},
-		Conn:     conn,
-		Stream:   stream,
+		logLevel:            logLevel,
+		writeMut:            &sync.Mutex{},
+		MsgResponseChan:     make(map[string]chan []byte),
+		FileResponseChan:    make(map[string]chan []byte),
+		FileMsgResponseChan: make(map[string]chan []byte),
+		Conn:                conn,
+		Stream:              stream,
 	}, nil
 }
 
@@ -80,7 +87,7 @@ func (c *Connection) ReadHeader() (*pb.Header, error) {
 	header := &pb.Header{}
 	proto.Unmarshal(headerBuf, header)
 	if c.logLevel <= qpLog.INFO {
-		log.Println("quics-protocol: ", header.Type)
+		log.Println("quics-protocol: ", header.MessageType, header.RequestType, header.RequestId)
 	}
 
 	return header, nil
@@ -114,44 +121,41 @@ func (c *Connection) ReadMessage() (*pb.Message, error) {
 	message := &pb.Message{}
 	proto.Unmarshal(messageBuf, message)
 	if c.logLevel <= qpLog.INFO {
-		log.Println("quics-protocol: ", message.Type, string(message.Data))
+		log.Println("quics-protocol: ", "message data: ", string(message.Data))
 	}
 	return message, nil
 }
 
-func (c *Connection) ReadFile() (string, *fileinfo.FileInfo, io.Reader, error) {
+func (c *Connection) ReadFile() (*fileinfo.FileInfo, io.Reader, error) {
 	fileInfoSizeBuf := make([]byte, 2)
 	if c.logLevel <= qpLog.INFO {
 		log.Println("quics-protocol: ", "read file info size")
 	}
 	n, err := io.ReadFull(c.Stream, fileInfoSizeBuf)
 	if err != nil {
-		return "", nil, nil, err
+		return nil, nil, err
 	}
 	if n != 2 {
-		return "", nil, nil, fmt.Errorf("file info size is not 2 bytes")
+		return nil, nil, fmt.Errorf("file info size is not 2 bytes")
 	}
 	fileInfoSize := uint16(binary.BigEndian.Uint16(fileInfoSizeBuf))
 
 	fileInfoBuf := make([]byte, fileInfoSize)
 	n, err = io.ReadFull(c.Stream, fileInfoBuf)
 	if err != nil {
-		return "", nil, nil, err
+		return nil, nil, err
 	}
 	if n != int(fileInfoSize) {
-		return "", nil, nil, fmt.Errorf("file info size is not %d bytes", fileInfoSize)
+		return nil, nil, fmt.Errorf("file info size is not %d bytes", fileInfoSize)
 	}
 
 	protoFileInfo := &pb.FileInfo{}
 	proto.Unmarshal(fileInfoBuf, protoFileInfo)
-	if c.logLevel <= qpLog.INFO {
-		log.Println("quics-protocol: ", protoFileInfo.Type)
-	}
 
 	fileInfo, err := fileinfo.DecodeFileInfo(protoFileInfo.FileInfo)
 	if err != nil {
 		fmt.Println(err)
-		return "", nil, nil, err
+		return nil, nil, err
 	}
 	if c.logLevel <= qpLog.INFO {
 		log.Println("quics-protocol: ", fileInfo.Name, fileInfo.Size, "bytes")
@@ -163,17 +167,21 @@ func (c *Connection) ReadFile() (string, *fileinfo.FileInfo, io.Reader, error) {
 		log.Println("quics-protocol: ", "init file reader with size", fileInfo.Size)
 	}
 
-	return protoFileInfo.Type, fileInfo, fileReader, nil
+	return fileInfo, fileReader, nil
 }
 
 func (c *Connection) SendMessage(msgType string, data []byte) error {
 	c.writeMut.Lock()
-	err := c.writeHeader(pb.MessageType_MESSAGE)
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		return err
+	}
+	err = c.writeHeader(pb.MessageType_MESSAGE, requestId, msgType)
 	if err != nil {
 		return err
 	}
 
-	err = c.writeMessage(msgType, data)
+	err = c.writeMessage(data)
 	if err != nil {
 		return err
 	}
@@ -184,12 +192,16 @@ func (c *Connection) SendMessage(msgType string, data []byte) error {
 
 func (c *Connection) SendFile(fileType string, filePath string) error {
 	c.writeMut.Lock()
-	err := c.writeHeader(pb.MessageType_FILE)
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		return err
+	}
+	err = c.writeHeader(pb.MessageType_FILE, requestId, fileType)
 	if err != nil {
 		return err
 	}
 
-	err = c.writeFile(fileType, filePath)
+	err = c.writeFile(filePath)
 	if err != nil {
 		return err
 	}
@@ -198,19 +210,23 @@ func (c *Connection) SendFile(fileType string, filePath string) error {
 	return nil
 }
 
-func (c *Connection) SendFileWithMessage(fileMsgType string, data []byte, filePath string) error {
+func (c *Connection) SendFileMessage(fileMsgType string, data []byte, filePath string) error {
 	c.writeMut.Lock()
-	err := c.writeHeader(pb.MessageType_FILE_W_MESSAGE)
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		return err
+	}
+	err = c.writeHeader(pb.MessageType_FILE_MESSAGE, requestId, fileMsgType)
 	if err != nil {
 		return err
 	}
 
-	err = c.writeMessage(fileMsgType, data)
+	err = c.writeMessage(data)
 	if err != nil {
 		return err
 	}
 
-	err = c.writeFile(fileMsgType, filePath)
+	err = c.writeFile(filePath)
 	if err != nil {
 		return err
 	}
@@ -219,9 +235,117 @@ func (c *Connection) SendFileWithMessage(fileMsgType string, data []byte, filePa
 	return nil
 }
 
-func (c *Connection) writeHeader(messageType pb.MessageType) error {
+func (c *Connection) SendMessageWithResponse(msgType string, data []byte) ([]byte, error) {
+	c.writeMut.Lock()
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	err = c.writeHeader(pb.MessageType_MESSAGE_W_RESPONSE, requestId, msgType)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.writeMessage(data)
+	if err != nil {
+		return nil, err
+	}
+	c.writeMut.Unlock()
+
+	requestUUID, err := uuid.FromBytes(requestId)
+	if err != nil {
+		return nil, err
+	}
+	matchedChan := make(chan []byte)
+	c.MsgResponseChan[requestUUID.String()] = matchedChan
+	response := <-c.MsgResponseChan[requestUUID.String()]
+	log.Println("quics-protocol: ", "response received")
+	delete(c.MsgResponseChan, requestUUID.String())
+	return response, nil
+}
+
+func (c *Connection) SendFileWithResponse(fileType string, filePath string) ([]byte, error) {
+	c.writeMut.Lock()
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	err = c.writeHeader(pb.MessageType_FILE_W_RESPONSE, requestId, fileType)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.writeFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	c.writeMut.Unlock()
+
+	requestUUID, err := uuid.FromBytes(requestId)
+	if err != nil {
+		return nil, err
+	}
+	matchedChan := make(chan []byte)
+	c.FileResponseChan[requestUUID.String()] = matchedChan
+	response := <-c.FileResponseChan[requestUUID.String()]
+	delete(c.FileResponseChan, requestUUID.String())
+	return response, nil
+}
+
+func (c *Connection) SendFileMessageWithResponse(fileMsgType string, data []byte, filePath string) ([]byte, error) {
+	c.writeMut.Lock()
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	err = c.writeHeader(pb.MessageType_FILE_MESSAGE_W_RESPONSE, requestId, fileMsgType)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.writeMessage(data)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.writeFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	c.writeMut.Unlock()
+
+	requestUUID, err := uuid.FromBytes(requestId)
+	if err != nil {
+		return nil, err
+	}
+	matchedChan := make(chan []byte)
+	c.FileMsgResponseChan[requestUUID.String()] = matchedChan
+	response := <-c.FileMsgResponseChan[requestUUID.String()]
+	delete(c.FileMsgResponseChan, requestUUID.String())
+	return response, nil
+}
+
+func (c *Connection) SendResponse(responseType pb.MessageType, requestId []byte, requestType string, data []byte) error {
+	c.writeMut.Lock()
+	err := c.writeHeader(responseType, requestId, requestType)
+	if err != nil {
+		return err
+	}
+
+	err = c.writeMessage(data)
+	if err != nil {
+		return err
+	}
+	c.writeMut.Unlock()
+
+	return nil
+}
+
+func (c *Connection) writeHeader(messageType pb.MessageType, requestId []byte, requestType string) error {
 	header := &pb.Header{
-		Type: messageType,
+		MessageType: messageType,
+		RequestType: requestType,
+		RequestId:   requestId,
 	}
 	headerOut, err := proto.Marshal(header)
 	if err != nil {
@@ -246,9 +370,8 @@ func (c *Connection) writeHeader(messageType pb.MessageType) error {
 	return nil
 }
 
-func (c *Connection) writeMessage(msgType string, data []byte) error {
+func (c *Connection) writeMessage(data []byte) error {
 	message := &pb.Message{
-		Type: msgType,
 		Data: data,
 	}
 	messageOut, err := proto.Marshal(message)
@@ -275,7 +398,7 @@ func (c *Connection) writeMessage(msgType string, data []byte) error {
 	return nil
 }
 
-func (c *Connection) writeFile(fileType string, filePath string) error {
+func (c *Connection) writeFile(filePath string) error {
 	osFileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return err
@@ -286,7 +409,6 @@ func (c *Connection) writeFile(fileType string, filePath string) error {
 	}
 
 	fileInfo := &pb.FileInfo{
-		Type:     fileType,
 		FileInfo: bFileInfo,
 	}
 

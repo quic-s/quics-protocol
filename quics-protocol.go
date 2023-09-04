@@ -25,6 +25,9 @@ type QP struct {
 	logLevel     int
 }
 
+/*
+ * Create new quics-protocol instance with log level (LOG_LEVEL_DEBUG, LOG_LEVEL_INFO, LOG_LEVEL_ERROR)
+ */
 func New(logLevel int) (*QP, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	quicConf := &quic.Config{
@@ -43,6 +46,11 @@ func New(logLevel int) (*QP, error) {
 	}, nil
 }
 
+/*
+ * Dial to server with address and tls config.
+ * Return connection instance and error.
+ * Need to set receive handler before dialing.
+ */
 func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
@@ -69,9 +77,17 @@ func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error
 	if err != nil {
 		return nil, err
 	}
+
+	q.handler.RouteConnection(newConn)
 	return newConn, nil
 }
 
+/*
+ * Dial to server with address, tls config and initial message.
+ * Server need to start with ListenWithMessage for handling initial message.
+ * Return connection instance and error.
+ * Need to set receive handler before dialing.
+ */
 func (q *QP) DialWithMessage(address *net.UDPAddr, tlsConf *tls.Config, msgType string, data []byte) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
@@ -103,9 +119,16 @@ func (q *QP) DialWithMessage(address *net.UDPAddr, tlsConf *tls.Config, msgType 
 	if err != nil {
 		return nil, err
 	}
+
+	q.handler.RouteConnection(newConn)
 	return newConn, nil
 }
 
+/*
+ * Start server with address and tls config.
+ * Return error.
+ * Need to set receive handler before listening.
+ */
 func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *Connection)) error {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
@@ -176,6 +199,12 @@ func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(
 	}
 }
 
+/*
+ * Start server with address, tls config and initial message handler.
+ * Client need to start with DialWithMessage for sending initial message.
+ * Return error.
+ * Need to set receive handler before listening.
+ */
 func (q *QP) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *Connection, msgType string, data []byte)) error {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
@@ -242,7 +271,7 @@ func (q *QP) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHa
 			}
 
 			header, err := newConn.ReadHeader()
-			if header.Type != pb.MessageType_MESSAGE {
+			if header.MessageType != pb.MessageType_MESSAGE {
 				log.Println("quics-protocol: ", "Not message type")
 				return
 			}
@@ -255,12 +284,15 @@ func (q *QP) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHa
 				log.Println("quics-protocol: ", err)
 				return
 			}
-			connHandler(newConn, msg.Type, msg.Data)
+			connHandler(newConn, header.RequestType, msg.Data)
 			q.handler.RouteConnection(newConn)
 		}(conn)
 	}
 }
 
+/*
+ * Close quics-protocol instance.
+ */
 func (q *QP) Close() error {
 	if q.quicListener != nil {
 		if q.logLevel <= LOG_LEVEL_INFO {
@@ -275,32 +307,98 @@ func (q *QP) Close() error {
 	return nil
 }
 
+/*
+ * Set receive handler for message type.
+ */
 func (q *QP) RecvMessageHandleFunc(msgType string, handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.AddMessageHandleFunc(msgType, handler)
 	return nil
 }
 
+/*
+ * Set receive handler for file type.
+ */
 func (q *QP) RecvFileHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	q.handler.AddFileHandleFunc(fileType, handler)
 	return nil
 }
 
+/*
+ * Set receive handler for file message type.
+ */
 func (q *QP) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	q.handler.AddFileMessageHandleFunc(fileMsgType, handler)
 	return nil
 }
 
+/*
+ * Set receive handler for message type with response.
+ */
+func (q *QP) RecvMessageWithResponseHandleFunc(msgType string, handler func(conn *Connection, msgType string, data []byte) []byte) error {
+	q.handler.AddMessageWithResponseHandleFunc(msgType, handler)
+	return nil
+}
+
+/*
+ * Set receive handler for file type with response.
+ */
+func (q *QP) RecvFileWithResponseHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error {
+	q.handler.AddFileWithResponseHandleFunc(fileType, handler)
+	return nil
+}
+
+/*
+ * Set receive handler for file message type with response.
+ */
+func (q *QP) RecvFileMessageWithResponseHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error {
+	q.handler.AddFileMessageWithResponseHandleFunc(fileMsgType, handler)
+	return nil
+}
+
+/*
+ * Set default receive handler for message type.
+ */
 func (q *QP) RecvMessage(handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
 	return nil
 }
 
+/*
+ * Set default receive handler for file type.
+ */
 func (q *QP) RecvFile(handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
 	return nil
 }
 
+/*
+ * Set default receive handler for file message type.
+ */
 func (q *QP) RecvFileMessage(handler func(conn *Connection, msgType string, msgData []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
+	return nil
+}
+
+/*
+ * Set default receive handler for message type with response.
+ */
+func (q *QP) RecvMessageWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error {
+	q.handler.DefaultMessageWithResponseHandleFunc(handler)
+	return nil
+}
+
+/*
+ * Set default receive handler for file type with response.
+ */
+func (q *QP) RecvFileWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error {
+	q.handler.DefaultMessageWithResponseHandleFunc(handler)
+	return nil
+}
+
+/*
+ * Set default receive handler for file message type with response.
+ */
+func (q *QP) RecvFileMessageWithResponse(handler func(conn *Connection, msgType string, msgData []byte) []byte) error {
+	q.handler.DefaultMessageWithResponseHandleFunc(handler)
 	return nil
 }
