@@ -69,6 +69,8 @@ func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error
 	if err != nil {
 		return nil, err
 	}
+
+	q.handler.RouteConnection(newConn)
 	return newConn, nil
 }
 
@@ -103,6 +105,8 @@ func (q *QP) DialWithMessage(address *net.UDPAddr, tlsConf *tls.Config, msgType 
 	if err != nil {
 		return nil, err
 	}
+
+	q.handler.RouteConnection(newConn)
 	return newConn, nil
 }
 
@@ -242,7 +246,7 @@ func (q *QP) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHa
 			}
 
 			header, err := newConn.ReadHeader()
-			if header.Type != pb.MessageType_MESSAGE {
+			if header.MessageType != pb.MessageType_MESSAGE {
 				log.Println("quics-protocol: ", "Not message type")
 				return
 			}
@@ -255,7 +259,7 @@ func (q *QP) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHa
 				log.Println("quics-protocol: ", err)
 				return
 			}
-			connHandler(newConn, msg.Type, msg.Data)
+			connHandler(newConn, header.RequestType, msg.Data)
 			q.handler.RouteConnection(newConn)
 		}(conn)
 	}
@@ -290,6 +294,21 @@ func (q *QP) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *Co
 	return nil
 }
 
+func (q *QP) RecvMessageWithResponseHandleFunc(msgType string, handler func(conn *Connection, msgType string, data []byte) []byte) error {
+	q.handler.AddMessageWithResponseHandleFunc(msgType, handler)
+	return nil
+}
+
+func (q *QP) RecvFileWithResponseHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error {
+	q.handler.AddFileWithResponseHandleFunc(fileType, handler)
+	return nil
+}
+
+func (q *QP) RecvFileMessageWithResponseHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error {
+	q.handler.AddFileMessageWithResponseHandleFunc(fileMsgType, handler)
+	return nil
+}
+
 func (q *QP) RecvMessage(handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
 	return nil
@@ -302,5 +321,20 @@ func (q *QP) RecvFile(handler func(conn *Connection, msgType string, data []byte
 
 func (q *QP) RecvFileMessage(handler func(conn *Connection, msgType string, msgData []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
+	return nil
+}
+
+func (q *QP) RecvMessageWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error {
+	q.handler.DefaultMessageWithResponseHandleFunc(handler)
+	return nil
+}
+
+func (q *QP) RecvFileWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error {
+	q.handler.DefaultMessageWithResponseHandleFunc(handler)
+	return nil
+}
+
+func (q *QP) RecvFileMessageWithResponse(handler func(conn *Connection, msgType string, msgData []byte) []byte) error {
+	q.handler.DefaultMessageWithResponseHandleFunc(handler)
 	return nil
 }

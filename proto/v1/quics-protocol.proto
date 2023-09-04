@@ -5,28 +5,32 @@ package protocol.v1;
 option go_package = ".;v1";
 
 message Header {
-    MessageType type = 1;
+    MessageType messageType = 1;
+    string requestType = 2;
+    bytes requestId = 3;
 }
 
 enum MessageType {
     UNKNOWN = 0;
-    FILE = 1;
-    MESSAGE = 2;
-    FILE_W_MESSAGE = 3;
-    RESPONSE = 4;
+    MESSAGE = 1;
+    FILE = 2;
+    FILE_MESSAGE = 3;
+    MESSAGE_W_RESPONSE = 4;
+    FILE_W_RESPONSE = 5;
+    FILE_MESSAGE_W_RESPONSE = 6;
+    RESPONSE_MESSAGE = 7;
+    RESPONSE_FILE = 8;
+    RESPONSE_FILE_MESSAGE = 9;
 }
 
 message Message {
-    string type = 1;
-    bytes data = 2;
+    bytes data = 1;
 }
 
 message FileInfo {
-    string type = 1;
-    bytes fileInfo = 2;
+    bytes fileInfo = 1;
 }
 
 message Response {
-    int32 status = 1;
-    string message = 2;
+    bytes data = 1;
 }
