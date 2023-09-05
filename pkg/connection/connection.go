@@ -410,9 +410,46 @@ func (c *Connection) writeMessage(data []byte) error {
 func (c *Connection) writeFile(filePath string) error {
 	osFileInfo, err := os.Stat(filePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			qpFileInfo := &fileinfo.FileInfo{
+				Name: filePath,
+				Size: 0,
+			}
+
+			bFileInfo, err := fileinfo.EncodeFileInfo(qpFileInfo)
+			if err != nil {
+				return err
+			}
+
+			fileInfo := &pb.FileInfo{
+				FileInfo: bFileInfo,
+			}
+
+			fileInfoOut, err := proto.Marshal(fileInfo)
+			if err != nil {
+				return err
+			}
+
+			buf := make([]byte, 2, 2+len(fileInfoOut))
+			binary.BigEndian.PutUint16(buf[:2], uint16(len(fileInfoOut)))
+			buf = append(buf, fileInfoOut...)
+
+			n, err := c.Stream.Write(buf)
+			if err != nil {
+				return err
+			}
+			if n != len(buf) {
+				return fmt.Errorf("write size is not equal to buf size")
+			}
+			if c.logLevel <= qpLog.INFO {
+				log.Println("quics-protocol: ", "sent", n, "bytes")
+			}
+
+			return nil
+		}
 		return err
 	}
-	bFileInfo, err := fileinfo.EncodeFileInfo(osFileInfo)
+	bFileInfo, err := fileinfo.EncodeFromOsFileInfo(osFileInfo)
 	if err != nil {
 		return err
 	}
