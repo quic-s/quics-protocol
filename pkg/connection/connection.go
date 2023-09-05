@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -54,6 +55,14 @@ func (c *Connection) Close() error {
 		return err
 	}
 	err = c.Conn.CloseWithError(0, "Connection closed by peer")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Connection) CloseWithError(message string) error {
+	err := c.Conn.CloseWithError(0, message)
 	if err != nil {
 		return err
 	}
@@ -438,7 +447,8 @@ func (c *Connection) writeFile(filePath string) error {
 	}
 	defer file.Close()
 
-	num, err := io.Copy(c.Stream, file)
+	fileBuf := bufio.NewReader(file)
+	num, err := io.Copy(c.Stream, fileBuf)
 	if err != nil {
 		return err
 	}
