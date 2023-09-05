@@ -46,7 +46,7 @@ func TestServerClient(t *testing.T) {
 		})
 	}()
 
-	wg.Add(5)
+	wg.Add(4)
 	t.Run("Send Message to Server", func(t *testing.T) {
 		// initialize client
 		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
@@ -172,7 +172,7 @@ func TestServerClient(t *testing.T) {
 		// start client
 		conn, err := quicClient.DialWithMessage(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "errtest", []byte("test message"))
 		if err != nil {
-			log.Println("quics-protocol: ", err)
+			log.Println("error: ", err)
 			return
 		}
 		time.Sleep(3 * time.Second)
