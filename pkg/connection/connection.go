@@ -181,65 +181,75 @@ func (c *Connection) ReadFile() (*fileinfo.FileInfo, io.Reader, error) {
 
 func (c *Connection) SendMessage(msgType string, data []byte) error {
 	c.writeMut.Lock()
+	defer c.writeMut.Unlock()
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
 	err = c.writeHeader(pb.MessageType_MESSAGE, requestId, msgType)
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = c.writeMessage(data)
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
-	c.writeMut.Unlock()
 
 	return nil
 }
 
 func (c *Connection) SendFile(fileType string, filePath string) error {
 	c.writeMut.Lock()
+	defer c.writeMut.Unlock()
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
 	err = c.writeHeader(pb.MessageType_FILE, requestId, fileType)
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = c.writeFile(filePath)
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
-	c.writeMut.Unlock()
 
 	return nil
 }
 
 func (c *Connection) SendFileMessage(fileMsgType string, data []byte, filePath string) error {
 	c.writeMut.Lock()
+	defer c.writeMut.Unlock()
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
 	err = c.writeHeader(pb.MessageType_FILE_MESSAGE, requestId, fileMsgType)
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = c.writeMessage(data)
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = c.writeFile(filePath)
 	if err != nil {
+		c.Stream.CancelWrite(0)
 		return err
 	}
-	c.writeMut.Unlock()
 
 	return nil
 }
@@ -283,15 +293,21 @@ func (c *Connection) SendFileWithResponse(fileType string, filePath string) ([]b
 	c.writeMut.Lock()
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	err = c.writeHeader(pb.MessageType_FILE_W_RESPONSE, requestId, fileType)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 
 	err = c.writeFile(filePath)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	c.writeMut.Unlock()
@@ -311,20 +327,28 @@ func (c *Connection) SendFileMessageWithResponse(fileMsgType string, data []byte
 	c.writeMut.Lock()
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	err = c.writeHeader(pb.MessageType_FILE_MESSAGE_W_RESPONSE, requestId, fileMsgType)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 
 	err = c.writeMessage(data)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 
 	err = c.writeFile(filePath)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	c.writeMut.Unlock()
@@ -342,6 +366,7 @@ func (c *Connection) SendFileMessageWithResponse(fileMsgType string, data []byte
 
 func (c *Connection) SendResponse(responseType pb.MessageType, requestId []byte, requestType string, data []byte) error {
 	c.writeMut.Lock()
+	defer c.writeMut.Unlock()
 	err := c.writeHeader(responseType, requestId, requestType)
 	if err != nil {
 		return err
@@ -351,7 +376,6 @@ func (c *Connection) SendResponse(responseType pb.MessageType, requestId []byte,
 	if err != nil {
 		return err
 	}
-	c.writeMut.Unlock()
 
 	return nil
 }
