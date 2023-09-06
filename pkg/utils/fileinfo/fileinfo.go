@@ -16,8 +16,20 @@ type FileInfo struct {
 	IsDir   bool
 }
 
+func EncodeFileInfo(src *FileInfo) ([]byte, error) {
+	gobBuf := new(bytes.Buffer)
+	enc := gob.NewEncoder(gobBuf)
+	err := enc.Encode(src)
+	if err != nil {
+		log.Println("quics-protocol: ", err)
+		return nil, err
+	}
+
+	return gobBuf.Bytes(), nil
+}
+
 // Encode your own type using gob
-func EncodeFileInfo(src os.FileInfo) ([]byte, error) {
+func EncodeFromOsFileInfo(src os.FileInfo) ([]byte, error) {
 	fileInfo := &FileInfo{
 		Name:    src.Name(),
 		Size:    src.Size(),

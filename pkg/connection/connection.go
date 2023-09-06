@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -54,6 +55,14 @@ func (c *Connection) Close() error {
 		return err
 	}
 	err = c.Conn.CloseWithError(0, "Connection closed by peer")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Connection) CloseWithError(message string) error {
+	err := c.Conn.CloseWithError(0, message)
 	if err != nil {
 		return err
 	}
@@ -239,15 +248,21 @@ func (c *Connection) SendMessageWithResponse(msgType string, data []byte) ([]byt
 	c.writeMut.Lock()
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	err = c.writeHeader(pb.MessageType_MESSAGE_W_RESPONSE, requestId, msgType)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 
 	err = c.writeMessage(data)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	c.writeMut.Unlock()
@@ -401,9 +416,46 @@ func (c *Connection) writeMessage(data []byte) error {
 func (c *Connection) writeFile(filePath string) error {
 	osFileInfo, err := os.Stat(filePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			qpFileInfo := &fileinfo.FileInfo{
+				Name: filePath,
+				Size: 0,
+			}
+
+			bFileInfo, err := fileinfo.EncodeFileInfo(qpFileInfo)
+			if err != nil {
+				return err
+			}
+
+			fileInfo := &pb.FileInfo{
+				FileInfo: bFileInfo,
+			}
+
+			fileInfoOut, err := proto.Marshal(fileInfo)
+			if err != nil {
+				return err
+			}
+
+			buf := make([]byte, 2, 2+len(fileInfoOut))
+			binary.BigEndian.PutUint16(buf[:2], uint16(len(fileInfoOut)))
+			buf = append(buf, fileInfoOut...)
+
+			n, err := c.Stream.Write(buf)
+			if err != nil {
+				return err
+			}
+			if n != len(buf) {
+				return fmt.Errorf("write size is not equal to buf size")
+			}
+			if c.logLevel <= qpLog.INFO {
+				log.Println("quics-protocol: ", "sent", n, "bytes")
+			}
+
+			return nil
+		}
 		return err
 	}
-	bFileInfo, err := fileinfo.EncodeFileInfo(osFileInfo)
+	bFileInfo, err := fileinfo.EncodeFromOsFileInfo(osFileInfo)
 	if err != nil {
 		return err
 	}
@@ -438,7 +490,8 @@ func (c *Connection) writeFile(filePath string) error {
 	}
 	defer file.Close()
 
-	num, err := io.Copy(c.Stream, file)
+	fileBuf := bufio.NewReader(file)
+	num, err := io.Copy(c.Stream, fileBuf)
 	if err != nil {
 		return err
 	}
