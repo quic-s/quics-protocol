@@ -248,15 +248,21 @@ func (c *Connection) SendMessageWithResponse(msgType string, data []byte) ([]byt
 	c.writeMut.Lock()
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	err = c.writeHeader(pb.MessageType_MESSAGE_W_RESPONSE, requestId, msgType)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 
 	err = c.writeMessage(data)
 	if err != nil {
+		c.Stream.CancelWrite(0)
+		c.writeMut.Unlock()
 		return nil, err
 	}
 	c.writeMut.Unlock()
