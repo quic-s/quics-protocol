@@ -308,7 +308,7 @@ func (q *QP) Close() error {
 }
 
 /*
- * Set receive handler for message type.
+ * RecvMessageHandleFunc sets the handler function for receiving messages from the client.
  */
 func (q *QP) RecvMessageHandleFunc(msgType string, handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.AddMessageHandleFunc(msgType, handler)
@@ -316,7 +316,7 @@ func (q *QP) RecvMessageHandleFunc(msgType string, handler func(conn *Connection
 }
 
 /*
- * Set receive handler for file type.
+ * RecvFileHandleFunc sets the handler function for receiving files from the client.
  */
 func (q *QP) RecvFileHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	q.handler.AddFileHandleFunc(fileType, handler)
@@ -324,7 +324,8 @@ func (q *QP) RecvFileHandleFunc(fileType string, handler func(conn *Connection, 
 }
 
 /*
- * Set receive handler for file message type.
+ * RecvFileMessageHandleFunc sets the handler function for receiving files from the client.
+ * Unlike RecvFileHandleFunc, this method also receives messages from the client when receiving files.
  */
 func (q *QP) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error {
 	q.handler.AddFileMessageHandleFunc(fileMsgType, handler)
@@ -332,7 +333,8 @@ func (q *QP) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *Co
 }
 
 /*
- * Set receive handler for message type with response.
+ * RecvMessageWithResponseHandleFunc sets the handler function for receiving messages from the client.
+ * Unlike RecvMessageHandleFunc, this method also sends a response to the client.
  */
 func (q *QP) RecvMessageWithResponseHandleFunc(msgType string, handler func(conn *Connection, msgType string, data []byte) []byte) error {
 	q.handler.AddMessageWithResponseHandleFunc(msgType, handler)
@@ -340,7 +342,8 @@ func (q *QP) RecvMessageWithResponseHandleFunc(msgType string, handler func(conn
 }
 
 /*
- * Set receive handler for file type with response.
+ * RecvFileWithResponseHandleFunc sets the handler function for receiving files from the client.
+ * Unlike RecvFileHandleFunc, this method also sends a response to the client.
  */
 func (q *QP) RecvFileWithResponseHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error {
 	q.handler.AddFileWithResponseHandleFunc(fileType, handler)
@@ -348,7 +351,8 @@ func (q *QP) RecvFileWithResponseHandleFunc(fileType string, handler func(conn *
 }
 
 /*
- * Set receive handler for file message type with response.
+ * RecvFileMessageWithResponseHandleFunc sets the handler function for receiving files from the client.
+ * Unlike RecvFileMessageHandleFunc, this method also sends a response to the client.
  */
 func (q *QP) RecvFileMessageWithResponseHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error {
 	q.handler.AddFileMessageWithResponseHandleFunc(fileMsgType, handler)
@@ -356,7 +360,7 @@ func (q *QP) RecvFileMessageWithResponseHandleFunc(fileMsgType string, handler f
 }
 
 /*
- * Set default receive handler for message type.
+ * RecvMessage sets the default handler function for receiving messages from the client.
  */
 func (q *QP) RecvMessage(handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
@@ -364,7 +368,7 @@ func (q *QP) RecvMessage(handler func(conn *Connection, msgType string, data []b
 }
 
 /*
- * Set default receive handler for file type.
+ * RecvFile sets the default handler function for receiving files from the client.
  */
 func (q *QP) RecvFile(handler func(conn *Connection, msgType string, data []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
@@ -372,7 +376,8 @@ func (q *QP) RecvFile(handler func(conn *Connection, msgType string, data []byte
 }
 
 /*
- * Set default receive handler for file message type.
+ * RecvFileMessage sets the default handler function for receiving files from the client.
+ * Unlike RecvFile, this method also receives messages from the client when receiving files.
  */
 func (q *QP) RecvFileMessage(handler func(conn *Connection, msgType string, msgData []byte)) error {
 	q.handler.DefaultMessageHandleFunc(handler)
@@ -380,7 +385,8 @@ func (q *QP) RecvFileMessage(handler func(conn *Connection, msgType string, msgD
 }
 
 /*
- * Set default receive handler for message type with response.
+ * RecvMessageWithResponse sets the default handler function for receiving messages from the client.
+ * Unlike RecvMessage, this method also sends a response to the client.
  */
 func (q *QP) RecvMessageWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error {
 	q.handler.DefaultMessageWithResponseHandleFunc(handler)
@@ -388,7 +394,8 @@ func (q *QP) RecvMessageWithResponse(handler func(conn *Connection, msgType stri
 }
 
 /*
- * Set default receive handler for file type with response.
+ * RecvFileWithResponse sets the default handler function for receiving files from the client.
+ * Unlike RecvFile, this method also sends a response to the client.
  */
 func (q *QP) RecvFileWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error {
 	q.handler.DefaultMessageWithResponseHandleFunc(handler)
@@ -396,7 +403,8 @@ func (q *QP) RecvFileWithResponse(handler func(conn *Connection, msgType string,
 }
 
 /*
- * Set default receive handler for file message type with response.
+ * RecvFileMessageWithResponse sets the default handler function for receiving files from the client.
+ * Unlike RecvFileMessage, this method also sends a response to the client.
  */
 func (q *QP) RecvFileMessageWithResponse(handler func(conn *Connection, msgType string, msgData []byte) []byte) error {
 	q.handler.DefaultMessageWithResponseHandleFunc(handler)

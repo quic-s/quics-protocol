@@ -14,6 +14,8 @@ const (
 	LOG_LEVEL_ERROR = qpLog.ERROR
 
 	ConnectionClosedByPeer = qpErr.ConnectionClosedByPeer
+
+	NoRecentActivity = qpErr.NoRecentActivity
 )
 
 var (
