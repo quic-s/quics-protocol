@@ -4,6 +4,8 @@
 
 It uses the [quic-go](https://github.com/quic-go/quic-go) library to implement QUIC protocol communication, which aims to achieve faster and more reliable connections.
 
+[Features](#features) | [Usage](#usage) | [Types](#types) | [Design](#design) | [Contribute](#contribute)
+
 ## Features
 
 - Send and receive messages
@@ -421,3 +423,168 @@ func (c *Connection) CloseWithError(message string) error
 ```
 
 CloseWithError closes the connection with an error message.
+
+## Design
+
+**quics-protocol** largely consists of quics-protocol, connection, and handler. The quics-protocol is a library for communication between a server and a client. The communication is initiated by opening a port on the server using the Listen method and dialing on the client. 
+
+The connection is a connection instance that is created when a client connects to a server. After connection is established, connection instance is passed to the handler's RouteConnection method. 
+
+The handler is created when quics-protocol instance is created. It is used to handle messages and files received from the client. But handler is only used internally by quics-protocol. So, you may don't need to use it directly.
+
+### protocol data structure
+
+Every message and file sent through quics-protocol has a header. The header is used to determine which handler to use on the receiving side. 
+
+Google's protobuf library is used to design protocol data. The protocol data structure is as follows.
+
+```protobuf
+message Header {
+    MessageType messageType = 1;
+    string requestType = 2;
+    bytes requestId = 3;
+}
+
+enum MessageType {
+    UNKNOWN = 0;
+    MESSAGE = 1;
+    FILE = 2;
+    FILE_MESSAGE = 3;
+    MESSAGE_W_RESPONSE = 4;
+    FILE_W_RESPONSE = 5;
+    FILE_MESSAGE_W_RESPONSE = 6;
+    RESPONSE_MESSAGE = 7;
+    RESPONSE_FILE = 8;
+    RESPONSE_FILE_MESSAGE = 9;
+}
+
+message Message {
+    bytes data = 1;
+}
+
+message FileInfo {
+    bytes fileInfo = 1;
+}
+
+message Response {
+    bytes data = 1;
+}
+```
+
+When data is actually transmitted through the quic protocol, it is transmitted as a byte stream in the form below. 
+
+- Message
+
+```
+ 0                   1
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Header Length         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\            Header             \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Message Length        |
+|           (32 bits)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\            Message            \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+Above structure is case of sending message.
+
+The header length word is 16 bits. It indicates the length of the following Header message. The Header is in protocol buffer format. 
+
+The Header describes the message type, request type, and request id. The message type is specified the data structure(message, file, or file with message). 
+
+The request type is specified the handler to use on the receiving side. The request id is used to match the response from the receiving side.
+
+Message length word is 32 bits. It indicates the length of the following Message message. So, the maximum size of the message is 4GB.
+
+The Message is just bytes data. So, user's need to serialize and deserialize the data.
+
+- File
+
+```
+ 0                   1
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Header Length         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\            Header             \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         File Info Length      |
+|           (16 bits)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\           File Info           \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\            File               \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+The header length and header are the same as the message above. 
+
+However, the content after the header is slightly different, first followed by the 16-bit file info size. The file info is protocol buffer format with bytes data, so it needs to be serialized and deserialized as form of qp.FileInfo.
+
+After the file info, the file data is followed. File data is byte data equal to the size transmitted through fileinfo above. 
+
+Because the file can be large, it is passed as a parameter to the handler function as an io.Reader type object. Users can read this and receive the file.
+
+- File with message
+
+```
+ 0                   1
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Header Length         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\            Header             \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         Message Length        |
+|           (32 bits)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\            Message            \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|         File Info Length      |
+|           (16 bits)           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\           File Info           \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/                               /
+\            File               \
+/                               /
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+The file with message is the combination form of message and file. The header and message are the same as the message above. 
+
+The file info and file are the same as the file above.
+
+It can be seen as simply a form in which messages and files are delivered at once as a transaction.
+
+- Response
+
+Response is a same form as message. The only difference is that the message type is different.
+
+Because the response is just bytes data, it need to be serialized and deserialized by user.
+
+## Contribute
+
+To report bugs or request features, please use the issue tracker. Before you do so, make sure you are running the latest version, and please do a quick search to see if the issue has already been reported.
+
+For more discussion, please join the [quics discord](https://discord.com/invite/HRtY7pNZz2)

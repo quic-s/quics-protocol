@@ -26,6 +26,7 @@ func main() {
 		log.Println("quics-protocol: ", err)
 	}
 
+	log.Println("quics-protocol: ", "send message to server")
 	// send message to server
 	conn.SendMessage("test", []byte("test message"))
 

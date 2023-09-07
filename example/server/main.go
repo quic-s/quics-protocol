@@ -16,8 +16,8 @@ func main() {
 	}
 
 	err = quicServer.RecvMessageHandleFunc("test", func(conn *qp.Connection, msgType string, data []byte) {
-		log.Println("quics-protocol: ", "message received ", conn.Conn.RemoteAddr().String())
-		log.Println("quics-protocol: ", msgType, string(data))
+		log.Println("quics-protocol: ", "message received from ", conn.Conn.RemoteAddr().String())
+		log.Println("quics-protocol: msgType: ", msgType, "data: ", string(data))
 	})
 	if err != nil {
 		log.Println("quics-protocol: ", err)
