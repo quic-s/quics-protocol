@@ -2,10 +2,9 @@ package main_test
 
 import (
 	"crypto/tls"
-	"io"
+	"fmt"
 	"log"
 	"net"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -16,20 +15,130 @@ import (
 var wg = sync.WaitGroup{}
 
 func TestServerClient(t *testing.T) {
-	// initialize server
-	quicServer, err := initializeServer(t)
+	// initialize and run server
+	wg.Add(2)
+	quicServer, err := runServer(t)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer wg.Wait()
 
 	wg.Add(1)
-	defer wg.Wait()
+	t.Run("Send Message to Server", func(t *testing.T) {
+		defer wg.Done()
+		// initialize client
+		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
+		if err != nil {
+			log.Println("quics-client: ", err)
+		}
+
+		tlsConf := &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"quics-protocol"},
+		}
+		// start client
+		conn, err := quicClient.Dial(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf)
+		if err != nil {
+			log.Println("quics-client: ", err)
+		}
+
+		// open transaction
+		err = conn.OpenTransaction("test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+			log.Println("quics-client: ", "send transaction to server")
+			log.Println("quics-client: ", "transactionName: ", transactionName)
+			log.Println("quics-client: ", "transactionID: ", string(transactionID))
+
+			err := stream.SendBMessage([]byte("send message"))
+			if err != nil {
+				log.Println("quics-client: ", err)
+				return err
+			}
+
+			data, err := stream.RecvBMessage()
+			if err != nil {
+				log.Println("quics-client: ", err)
+				return err
+			}
+			log.Println("quics-client: ", "recv message from server")
+			log.Println("quics-client: ", "message: ", string(data))
+			if string(data) != "return message" {
+				return fmt.Errorf("quics-client: Received message is not the intended message.")
+			}
+
+			log.Println("quics-client: ", "send file to server")
+			err = stream.SendFile("test/test.txt")
+			if err != nil {
+				log.Println("quics-client: ", err)
+				return err
+			}
+
+			log.Println("quics-client: ", "transaction finished")
+			return nil
+		})
+		if err != nil {
+			log.Println("quics-client: ", err)
+		}
+
+		// wait for all stream is sent to server
+		time.Sleep(4 * time.Second)
+		conn.Close()
+	})
+
+	quicServer.Close()
+}
+
+func runServer(t *testing.T) (*qp.QP, error) {
+	// initialize server
+	quicServer, err := qp.New(qp.LOG_LEVEL_INFO)
+	if err != nil {
+		return nil, err
+	}
+	err = quicServer.RecvTransactionHandleFunc("test", func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) {
+		defer wg.Done()
+		log.Println("quics-server: ", "message received ", conn.Conn.RemoteAddr().String())
+
+		data, err := stream.RecvBMessage()
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "recv message from client")
+		log.Println("quics-server: ", "message: ", string(data))
+		if string(data) != "send message" {
+			log.Println("quics-server: Recieved message is not inteded message.")
+			return
+		}
+
+		err = stream.SendBMessage([]byte("return message"))
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+
+		fileInfo, fileContent, err := stream.RecvFile()
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "file received")
+
+		err = fileInfo.WriteFileWithInfo("received/test.txt", fileContent)
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "file saved")
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	go func() {
 		defer wg.Done()
 
 		cert, err := qp.GetCertificate("", "")
 		if err != nil {
-			log.Println("quics-protocol: ", err)
+			log.Println("quics-server: ", err)
 			return
 		}
 		tlsConf := &tls.Config{
@@ -38,285 +147,9 @@ func TestServerClient(t *testing.T) {
 		}
 
 		// start server
-		quicServer.ListenWithMessage(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection, msgType string, data []byte) {
-			log.Println("quics-protocol: ", "new connection ", conn.Conn.RemoteAddr().String())
-			if msgType == "errtest" {
-				conn.CloseWithError("test error")
-			}
+		quicServer.Listen(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection) {
+			log.Println("quics-server: ", "new connection ", conn.Conn.RemoteAddr().String())
 		})
 	}()
-
-	wg.Add(5)
-	t.Run("Send Message to Server", func(t *testing.T) {
-		// initialize client
-		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		tlsConf := &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"quics-protocol"},
-		}
-		// start client
-		conn, err := quicClient.DialWithMessage(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "test", []byte("test message"))
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		// send message to server
-		conn.SendMessage("test", []byte("test message"))
-
-		// delay for waiting message sent to server
-		time.Sleep(3 * time.Second)
-		conn.Close()
-	})
-
-	t.Run("Send File to Server", func(t *testing.T) {
-		// initialize client
-		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		tlsConf := &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"quics-protocol"},
-		}
-		// start client
-		conn, err := quicClient.DialWithMessage(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "test", []byte("test message"))
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		// send message to server
-		conn.SendFile("test", "test.txt")
-
-		// delay for waiting message sent to server
-		time.Sleep(3 * time.Second)
-		conn.Close()
-	})
-
-	t.Run("Send File with Message to Server", func(t *testing.T) {
-		// initialize client
-		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		tlsConf := &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"quics-protocol"},
-		}
-		// start client
-		conn, err := quicClient.DialWithMessage(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "test", []byte("test message"))
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		// send message to server
-		conn.SendFileMessage("test", []byte("test message"), "test.txt")
-
-		// delay for waiting message sent to server
-		time.Sleep(3 * time.Second)
-		conn.Close()
-	})
-
-	t.Run("Send Message to Server and Get Response", func(t *testing.T) {
-		// initialize client
-		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		tlsConf := &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"quics-protocol"},
-		}
-		// start client
-		conn, err := quicClient.DialWithMessage(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "test", []byte("test message"))
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		// send message to server
-		response, err := conn.SendMessageWithResponse("test", []byte("test message"))
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		log.Println("response test: ", string(response))
-
-		// delay for waiting message sent to server
-		time.Sleep(3 * time.Second)
-		conn.Close()
-	})
-
-	t.Run("Close With Error test", func(t *testing.T) {
-		// initialize client
-		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		tlsConf := &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"quics-protocol"},
-		}
-		// start client
-		conn, err := quicClient.DialWithMessage(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "errtest", []byte("test message"))
-		if err != nil {
-			log.Println("error: ", err)
-			return
-		}
-		time.Sleep(3 * time.Second)
-		conn.Close()
-	})
-
-	t.Run("Send non-exist File with Message to Server", func(t *testing.T) {
-		// initialize client
-		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		tlsConf := &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"quics-protocol"},
-		}
-		// start client
-		conn, err := quicClient.DialWithMessage(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "test", []byte("test message"))
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-		if err != nil {
-			log.Println("quics-protocol: ", err)
-		}
-
-		// send message to server
-		conn.SendFileMessage("nonexist", []byte("test message"), "test2.txt")
-
-		// delay for waiting message sent to server
-		time.Sleep(3 * time.Second)
-		conn.Close()
-	})
-
-	quicServer.Close()
-}
-
-func initializeServer(t *testing.T) (*qp.QP, error) {
-	// initialize server
-	quicServer, err := qp.New(qp.LOG_LEVEL_INFO)
-	if err != nil {
-		return nil, err
-	}
-	err = quicServer.RecvMessageHandleFunc("test", func(conn *qp.Connection, msgType string, data []byte) {
-		defer wg.Done()
-		log.Println("quics-protocol: ", "message received ", conn.Conn.RemoteAddr().String())
-		log.Println("quics-protocol: ", msgType, string(data))
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = quicServer.RecvFileHandleFunc("test", func(conn *qp.Connection, fileType string, fileInfo *qp.FileInfo, fileReader io.Reader) {
-		defer wg.Done()
-		log.Println("quics-protocol: ", "file received ", fileInfo.Name)
-		file, err := os.Create("received.txt")
-		if err != nil {
-			t.Fatal(err)
-		}
-		n, err := io.Copy(file, fileReader)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if n != fileInfo.Size {
-			t.Fatalf("quics-protocol: read only %dbytes", n)
-		}
-		log.Println("quics-protocol: ", "file saved with ", n, "bytes")
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = quicServer.RecvFileMessageHandleFunc("test", func(conn *qp.Connection, fileMsgType string, data []byte, fileInfo *qp.FileInfo, fileReader io.Reader) {
-		defer wg.Done()
-		log.Println("quics-protocol: ", "message received ", conn.Conn.RemoteAddr().String())
-		log.Println("quics-protocol: ", fileMsgType, string(data))
-
-		log.Println("quics-protocol: ", "file received ", fileInfo.Name)
-		file, err := os.Create("received2.txt")
-		if err != nil {
-			t.Fatal(err)
-		}
-		n, err := io.Copy(file, fileReader)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if n != fileInfo.Size {
-			log.Println("quics-protocol: ", "read only ", n, "bytes")
-			t.Fatal(err)
-		}
-		log.Println("quics-protocol: ", "file saved")
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = quicServer.RecvFileMessageHandleFunc("test", func(conn *qp.Connection, fileMsgType string, data []byte, fileInfo *qp.FileInfo, fileReader io.Reader) {
-		defer wg.Done()
-		log.Println("quics-protocol: ", "message received ", conn.Conn.RemoteAddr().String())
-		log.Println("quics-protocol: ", fileMsgType, string(data))
-
-		log.Println("quics-protocol: ", "file received ", fileInfo.Name)
-		file, err := os.Create("received2.txt")
-		if err != nil {
-			t.Fatal(err)
-		}
-		n, err := io.Copy(file, fileReader)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if n != fileInfo.Size {
-			log.Println("quics-protocol: ", "read only ", n, "bytes")
-			t.Fatal(err)
-		}
-		log.Println("quics-protocol: ", "file saved")
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = quicServer.RecvMessageWithResponseHandleFunc("test", func(conn *qp.Connection, msgType string, data []byte) []byte {
-		defer wg.Done()
-		log.Println("quics-protocol: ", "message received ", conn.Conn.RemoteAddr().String())
-		log.Println("quics-protocol: ", msgType, string(data))
-		return []byte("response")
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = quicServer.RecvFileMessageHandleFunc("nonexist", func(conn *qp.Connection, fileMsgType string, data []byte, fileInfo *qp.FileInfo, fileReader io.Reader) {
-		defer wg.Done()
-		log.Println("quics-protocol: ", "message received ", conn.Conn.RemoteAddr().String())
-		log.Println("quics-protocol: ", fileMsgType, string(data))
-
-		log.Println("quics-protocol: ", "file received ", fileInfo.Name)
-		if fileInfo.Size != 0 {
-			t.Fatal("fileInfo.Size must be 0")
-		}
-		log.Println("quics-protocol: ", "0 bytes file received")
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	return quicServer, nil
 }
