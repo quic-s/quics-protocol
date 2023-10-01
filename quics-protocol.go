@@ -13,6 +13,10 @@ import (
 	qpLog "github.com/quic-s/quics-protocol/pkg/log"
 )
 
+// QP is a quics-protocol instance.
+// To create a new instance, use the New method.
+// For more information, see the README.md of the quics-protocol repository.
+// https://github.com/quic-s/quics-protocol
 type QP struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -22,9 +26,7 @@ type QP struct {
 	logLevel     int
 }
 
-/*
- * Create new quics-protocol instance with log level (LOG_LEVEL_DEBUG, LOG_LEVEL_INFO, LOG_LEVEL_ERROR)
- */
+// Create new quics-protocol instance with log level (LOG_LEVEL_DEBUG, LOG_LEVEL_INFO, LOG_LEVEL_ERROR)
 func New(logLevel int) (*QP, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	quicConf := &quic.Config{
@@ -43,11 +45,9 @@ func New(logLevel int) (*QP, error) {
 	}, nil
 }
 
-/*
- * Dial to server with address and tls config.
- * Return connection instance and error.
- * Need to set receive handler before dialing.
- */
+// Dial connects to the address addr on the named network net with TLS configuration tlsConf.
+// Return connection instance and error.
+// Need to set receive handler using RecvTransactionHandleFunc method before dialing.
 func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
@@ -80,12 +80,10 @@ func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error
 	return newConn, nil
 }
 
-/*
- * Dial to server with address, tls config and initial message.
- * Server need to start with ListenWithMessage for handling initial message.
- * Return connection instance and error.
- * Need to set receive handler before dialing.
- */
+// DialWithTransaction connects to the address addr on the named network net with TLS configuration tlsConf.
+// Unlike Dial, this method also opens a transaction to the server. So, the transaction name and transaction function are needed as parameters.
+// Return connection instance and error.
+// Need to set receive handler using RecvTransactionHandleFunc before dialing.
 func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionName string, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
@@ -117,11 +115,9 @@ func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, tran
 	return newConn, nil
 }
 
-/*
- * Start server with address and tls config.
- * Return error.
- * Need to set receive handler before listening.
- */
+// Listen starts a server listening for incoming connections on the UDP address addr with TLS configuration tlsConf.
+// Return error.
+// Need to set receive handler using RecvTransactionHandleFunc method before listening.
 func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *Connection)) error {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
@@ -157,9 +153,7 @@ func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(
 	}
 }
 
-/*
- * Close quics-protocol instance.
- */
+// Close quics-protocol instance.
 func (q *QP) Close() error {
 	if q.quicListener != nil {
 		if q.logLevel <= LOG_LEVEL_INFO {
@@ -174,6 +168,9 @@ func (q *QP) Close() error {
 	return nil
 }
 
+// RecvTransactionHandleFunc sets the handler function for receiving transactions from the client.
+// The transaction name and callback function are needed as parameters.
+// The transaction name is used to determine which handler to use on the receiving side.
 func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error {
 	err := q.handler.AddTransactionHandleFunc(transactionName, callback)
 	if err != nil {
@@ -182,6 +179,9 @@ func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(con
 	return nil
 }
 
+// DefaultRecvTransactionHandleFunc sets the default handler function for receiving transactions from the client.
+// The callback function is needed as a parameter.
+// The default handler is used when the transaction name is not set or the transaction name is not found.
 func (q *QP) DefaultRecvTransactionHandleFunc(callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error {
 	err := q.handler.DefaultTransactionHandleFunc(callback)
 	if err != nil {

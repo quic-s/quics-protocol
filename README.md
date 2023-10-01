@@ -326,7 +326,7 @@ func (c *Connection) OpenTransaction(transactionName string, transactionFunc fun
 
 OpenTransaction opens a transaction to the server. The transaction name and transaction function are needed as parameters. The transaction name is used to determine which handler to use on the receiving side.
 
-transactionFunc is called when the transaction is opened. The stream, transaction name, and transaction id are passed as parameters. The stream is used to send and receive messages and files.
+`transactionFunc` is called when the transaction is opened. The stream, transaction name, and transaction id are passed as parameters. The stream is used to send and receive messages and files.
 
 #### Close
 
@@ -384,7 +384,7 @@ SendBMessage sends a bytes message through the connection. The message data need
 func (s *Stream) SendFile(filePath string) error
 ```
 
-SendFile sends a file through the connection. The file path needs to be passed as a parameter. The metadata of the file is automatically sent to the receiving side. If the filePath is a directory, the directory is sent as a file.  This method must be used in pairs with RecvFile.
+SendFile sends a file through the connection. The file path needs to be passed as a parameter. The metadata of the file is automatically sent to the receiving side. If the filePath is a directory, the directory is sent as a file. This method must be used in pairs with RecvFile.
 
 #### SendFileBMessage
 
