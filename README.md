@@ -8,12 +8,7 @@ It uses the [quic-go](https://github.com/quic-go/quic-go) library to implement Q
 
 ## Features
 
-- Send and receive messages
-- Send and receive files
-- Send and receive messages and files
-- Send and receive messages with response
-- Send and receive files with response
-- Send and receive messages and files with response
+- Open 
 
 ## Usage
 
@@ -54,20 +49,51 @@ func main() {
 	// initialize server
 	quicServer, err := qp.New(qp.LOG_LEVEL_INFO)
 	if err != nil {
-		log.Println("quics-protocol: ", err)
+		log.Println("quics-server: ", err)
 	}
 
-	err = quicServer.RecvMessageHandleFunc("test", func(conn *qp.Connection, msgType string, data []byte) {
-		log.Println("quics-protocol: ", "message received ", conn.Conn.RemoteAddr().String())
-		log.Println("quics-protocol: ", msgType, string(data))
+	err = quicServer.RecvTransactionHandleFunc("test", func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) {
+		log.Println("quics-server: ", "message received ", conn.Conn.RemoteAddr().String())
+
+		data, err := stream.RecvBMessage()
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "recv message from client")
+		log.Println("quics-server: ", "message: ", string(data))
+		if string(data) != "send message" {
+			log.Println("quics-server: Recieved message is not inteded message.")
+			return
+		}
+
+		err = stream.SendBMessage([]byte("return message"))
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+
+		fileInfo, fileContent, err := stream.RecvFile()
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "file received")
+
+		err = fileInfo.WriteFileWithInfo("example/server/received.txt", fileContent)
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "file saved")
 	})
 	if err != nil {
-		log.Println("quics-protocol: ", err)
+		log.Println("quics-server: ", err)
 	}
 
 	cert, err := qp.GetCertificate("", "")
 	if err != nil {
-		log.Println("quics-protocol: ", err)
+		log.Println("quics-server: ", err)
 		return
 	}
 	tlsConf := &tls.Config{
@@ -76,7 +102,7 @@ func main() {
 	}
 	// start server
 	quicServer.Listen(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection) {
-		log.Println("quics-protocol: ", "new connection ", conn.Conn.RemoteAddr().String())
+		log.Println("quics-server: ", "new connection ", conn.Conn.RemoteAddr().String())
 	})
 }
 ```
@@ -88,6 +114,7 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net"
 	"time"
@@ -109,13 +136,45 @@ func main() {
 	// start client
 	conn, err := quicClient.Dial(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf)
 	if err != nil {
-		log.Println("quics-protocol: ", err)
+		log.Println("quics-client: ", err)
 	}
 
+	log.Println("quics-client: ", "send message to server")
 	// send message to server
-	conn.SendMessage("test", []byte("test message"))
+	conn.OpenTransaction("test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+		log.Println("quics-client: ", "send transaction to server")
+		log.Println("quics-client: ", "transactionName: ", transactionName)
+		log.Println("quics-client: ", "transactionID: ", string(transactionID))
 
-	// delay for waiting message sent to server
+		err := stream.SendBMessage([]byte("send message"))
+		if err != nil {
+			log.Println("quics-client: ", err)
+			return err
+		}
+
+		data, err := stream.RecvBMessage()
+		if err != nil {
+			log.Println("quics-client: ", err)
+			return err
+		}
+		log.Println("quics-client: ", "recv message from server")
+		log.Println("quics-client: ", "message: ", string(data))
+		if string(data) != "return message" {
+			return fmt.Errorf("quics-client: Received message is not the intended message")
+		}
+
+		log.Println("quics-client: ", "send file to server")
+		err = stream.SendFile("test/test/test.txt")
+		if err != nil {
+			log.Println("quics-client: ", err)
+			return err
+		}
+
+		log.Println("quics-client: ", "transaction finished")
+		return nil
+	})
+
+	// wait for all stream is sent to server
 	time.Sleep(3 * time.Second)
 	conn.Close()
 }
@@ -127,31 +186,25 @@ func main() {
 	* [New](#new)
 	* [Listen](#listen)
 	* [Dial](#dial)
-	* [ListenWithMessage](#listenwithmessage)
-	* [DialWithMessage](#dialwithmessage)
+	* [DialWithTransaction](#dialwithtransaction)
 	* [Close](#close)
-	* [RecvMessageHandleFunc](#recvmessagehandlefunc)
-	* [RecvFileHandleFunc](#recvfilehandlefunc)
-	* [RecvFileMessageHandleFunc](#recvfilemessagehandlefunc)
-	* [RecvMessageWithResponseHandleFunc](#recvmessagewithresponsehandlefunc)
-	* [RecvFileWithResponseHandleFunc](#recvfilewithresponsehandlefunc)
-	* [RecvFileMessageWithResponseHandleFunc](#recvfilemessagewithresponsehandlefunc)
-	* [RecvMessage](#recvmessage)
-	* [RecvFile](#recvfile)
-	* [RecvFileMessage](#recvfilemessage)
-	* [RecvMessageWithResponse](#recvmessagewithresponse)
-	* [RecvFileWithResponse](#recvfilewithresponse)
-	* [RecvFileMessageWithResponse](#recvfilemessagewithresponse)
 * [Connection](#connection)
 	* [New](#new-1)
-	* [SendMessage](#sendmessage)
-	* [SendFile](#sendfile)
-	* [SendFileMessage](#sendfilemessage)
-	* [SendMessageWithResponse](#sendmessagewithresponse)
-	* [SendFileWithResponse](#sendfilewithresponse)
-	* [SendFileMessageWithResponse](#sendfilemessagewithresponse)
+	* [OpenTransaction](#opentransaction)
 	* [Close](#close-1)
 	* [CloseWithError](#closewitherror)
+* [Stream](#stream)
+	* [New](#new-2)
+	* [SendMessage](#sendmessage)
+	* [SendFile](#sendfile)
+	* [SendFileBMessage](#sendfilebmessage)
+	* [RecvBMessage](#recvbmessage)
+	* [RecvFile](#recvfile)
+	* [RecvFileBMessage](#recvfilebmessage)
+	* [Close](#close-2)
+* [FileInfo](#fileinfo)
+	* [WriteFileWithInfo](#writefilewithinfo)
+	* [ToProtobuf](#toprotobuf)
 
 ### QP
 
@@ -176,7 +229,17 @@ QP is a quics-protocol instance.
 func New(logLevel int) (*qp.QP, error)
 ```
 
-New creates a new quics-protocol instance.
+New creates a new quics-protocol instance. logLevel is used to set the log level that quics-protocol uses internally. The log level is set to qp.LOG_LEVEL_INFO by default. 
+
+logLevel can be set to one of the following values.
+
+```go
+const (
+	LOG_LEVEL_DEBUG = iota
+	LOG_LEVEL_INFO
+	LOG_LEVEL_ERROR
+)
+```
 
 #### Listen
 
@@ -186,9 +249,7 @@ func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(
 
 Listen starts a server listening for incoming connections on the UDP address addr with TLS configuration tlsConf.
 
-> Note: This method is paired with Dial, so clients should use it to initiate communication. Not DialWithMessage.
-
-> Note: Receiving handler must be set before calling this method. (ex: If you want to receive messages from the client after establish connections, use RecvMessageHandleFunc.)
+> Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
 
 #### Dial
 
@@ -198,37 +259,19 @@ func (qp *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*qp.Connection, e
 
 Dial connects to the address addr on the named network net with TLS configuration tlsConf.
 
-> Note: This method is paired with Listen, so servers should use it to initiate communication. Not ListenWithMessage.
+> Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
 
-> Note: Receiving handler must be set before calling this method. (ex: If you want to receive messages from the client after establish connections, use RecvMessageHandleFunc.)
-
-#### ListenWithMessage
+#### DialWithTransaction
 
 ```go
-func (q *QP) ListenWithMessage(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *qp.Connection, msgType string, data []byte)) error
+func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionName string, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error) (*Connection, error) 
 ```
 
-ListenWithMessage starts a server listening for incoming connections on the UDP address addr with TLS configuration tlsConf. Unlike Listen, this method also receives messages from the client when establishing connections.
+DialWithTransaction connects to the address addr on the named network net with TLS configuration tlsConf. Unlike Dial, this method also opens a transaction to the server. So, the transaction name and transaction function are needed as parameters.
 
-This can be used to implement handlers such as authentication when first establishing communication with a user.This method is used to receive messages from the client when establish connections. The message type and data are passed to the handler. 
+This can be used to send authentication information and more to the server in a transaction when connecting to the server. 
 
-> Note: This method is paired with DialWithMessage, so clients should use it to initiate communication.
-
-> Note: Receiving handler must be set before calling this method. (ex: If you want to receive messages from the client after establish connections, use RecvMessageHandleFunc.)
-
-#### DialWithMessage
-
-```go
-func (q *QP) DialWithMessage(address *net.UDPAddr, tlsConf *tls.Config, msgType string, data []byte) (*qp.Connection, error)
-```
-
-DialWithMessage connects to the address addr on the named network net with TLS configuration tlsConf. Unlike Dial, this method also sends messages to the server when establishing connections.
-
-This can be used to send authentication information and more to the server in a message the moment you first open a connection. So, the message type and data are passed to the handler.
-
-> Note: This method is paired with ListenWithMessage, so servers should use it to initiate communication.
-
-> Note: Receiving handler must be set before calling this method. (ex: If you want to receive messages from the client after establish connections, use RecvMessageHandleFunc.)
+> Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
 
 #### Close
 
@@ -238,113 +281,28 @@ func (q *QP) Close() error
 
 Close closes the quics-protocol instance.
 
-#### RecvMessageHandleFunc
+#### RecvTransactionHandleFunc
 
 ```go
-func (q *QP) RecvMessageHandleFunc(msgType string, handler func(conn *qp.Connection, msgType string, data []byte)) error
+func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error
 ```
 
-RecvMessageHandleFunc sets the handler function for receiving messages from the client.
+RecvTransactionHandleFunc sets the handler function for receiving transactions from the client. The transaction name and callback function are needed as parameters. The transaction name is used to determine which handler to use on the receiving side.
 
-#### RecvFileHandleFunc
+#### DefaultRecvTransactionHandleFunc
 
 ```go
-func (q *QP) RecvFileHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error
+func (q *QP) DefaultRecvTransactionHandleFunc(callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error
 ```
 
-RecvFileHandleFunc sets the handler function for receiving files from the client.
-
-#### RecvFileMessageHandleFunc
-
-```go
-func (q *QP) RecvFileMessageHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader)) error
-```
-
-RecvFileMessageHandleFunc sets the handler function for receiving files from the client. Unlike RecvFileHandleFunc, this method also receives messages from the client when receiving files.
-
-#### RecvMessageWithResponseHandleFunc
-
-```go
-func (q *QP) RecvMessageWithResponseHandleFunc(msgType string, handler func(conn *Connection, msgType string, data []byte) []byte) error
-```
-
-RecvMessageWithResponseHandleFunc sets the handler function for receiving messages from the client. Unlike RecvMessageHandleFunc, this method also sends a response to the client.
-
-#### RecvFileWithResponseHandleFunc
-
-```go
-func (q *QP) RecvFileWithResponseHandleFunc(fileType string, handler func(conn *Connection, fileType string, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error
-```
-
-RecvFileWithResponseHandleFunc sets the handler function for receiving files from the client. Unlike RecvFileHandleFunc, this method also sends a response to the client.
-
-#### RecvFileMessageWithResponseHandleFunc
-
-```go
-func (q *QP) RecvFileMessageWithResponseHandleFunc(fileMsgType string, handler func(conn *Connection, fileMsgType string, msgData []byte, fileInfo *fileinfo.FileInfo, fileReader io.Reader) []byte) error
-```
-
-RecvFileMessageWithResponseHandleFunc sets the handler function for receiving files from the client. Unlike RecvFileMessageHandleFunc, this method also sends a response to the client.
-
-#### RecvMessage
-
-```go
-func (q *QP) RecvMessage(handler func(conn *Connection, msgType string, data []byte)) error
-```
-
-RecvMessage sets the default handler function for receiving messages from the client. 
-
-#### RecvFile
-
-```go
-func (q *QP) RecvFile(handler func(conn *Connection, msgType string, data []byte)) error
-```
-
-RecvFile sets the default handler function for receiving files from the client.
-
-#### RecvFileMessage
-
-```go
-func (q *QP) RecvFileMessage(handler func(conn *Connection, msgType string, msgData []byte)) error
-```
-
-RecvFileMessage sets the default handler function for receiving files from the client. Unlike RecvFile, this method also receives messages from the client when receiving files.
-
-#### RecvMessageWithResponse
-
-```go
-func (q *QP) RecvMessageWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error
-```
-
-RecvMessageWithResponse sets the default handler function for receiving messages from the client. Unlike RecvMessage, this method also sends a response to the client.
-
-#### RecvFileWithResponse
-
-```go
-func (q *QP) RecvFileWithResponse(handler func(conn *Connection, msgType string, data []byte) []byte) error
-```
-
-RecvFileWithResponse sets the default handler function for receiving files from the client. Unlike RecvFile, this method also sends a response to the client.
-
-#### RecvFileMessageWithResponse
-
-```go
-func (q *QP) RecvFileMessageWithResponse(handler func(conn *Connection, msgType string, msgData []byte) []byte) error
-```
-
-RecvFileMessageWithResponse sets the default handler function for receiving files from the client. Unlike RecvFileMessage, this method also sends a response to the client.
+DefaultRecvTransactionHandleFunc sets the default handler function for receiving transactions from the client. The callback function is needed as a parameter. The default handler is used when the transaction name is not set or the transaction name is not found.
 
 ### Connection
 
 ```go
 type Connection struct {
-	logLevel            int
-	writeMut            *sync.Mutex
-	MsgResponseChan     map[string]chan []byte
-	FileResponseChan    map[string]chan []byte
-	FileMsgResponseChan map[string]chan []byte
-	Conn                quic.Connection
-	Stream              quic.Stream
+	logLevel int
+	Conn     quic.Connection
 }
 ```
 
@@ -360,53 +318,15 @@ func New(logLevel int, conn quic.Connection, stream quic.Stream) (*Connection, e
 
 New creates a new connection instance. This method is used internally by quics-protocol. So, you may don't need to use it directly.
 
-#### SendMessage
+#### OpenTransaction
 
 ```go
-func (c *Connection) SendMessage(msgType string, data []byte) error
+func (c *Connection) OpenTransaction(transactionName string, transactionFunc func(stream *qpStream.Stream, transactionName string, transactionID []byte) error) error
 ```
 
-SendMessage sends a message through the connection. The message type and data need to be passed as parameters. The message type is used to determine which handler to use on the receiving side.
+OpenTransaction opens a transaction to the server. The transaction name and transaction function are needed as parameters. The transaction name is used to determine which handler to use on the receiving side.
 
-#### SendFile
-
-```go
-func (c *Connection) SendFile(fileType string, filePath string) error
-```
-
-SendFile sends a file through the connection. The file type and file path need to be passed as parameters. The file type is used to determine which handler to use on the receiving side.
-
-#### SendFileMessage
-
-```go
-func (c *Connection) SendFileMessage(fileMsgType string, data []byte, filePath string) error
-```
-
-SendFileMessage sends a file and message through the connection. The fileMsgType, message data, and file path need to be passed as parameters. The fileMsgType is used to determine which handler to use on the receiving side.
-
-#### SendMessageWithResponse
-
-```go
-func (c *Connection) SendMessageWithResponse(msgType string, data []byte) ([]byte, error)
-```
-
-SendMessageWithResponse sends a message through the connection. The message type and data need to be passed as parameters. The message type is used to determine which handler to use on the receiving side. Unlike SendMessage, this method also waits for a response from the receiving side.
-
-#### SendFileWithResponse
-
-```go
-func (c *Connection) SendFileWithResponse(fileType string, filePath string) ([]byte, error)
-```
-
-SendFileWithResponse sends a file through the connection. The file type and file path need to be passed as parameters. The file type is used to determine which handler to use on the receiving side. Unlike SendFile, this method also waits for a response from the receiving side.
-
-#### SendFileMessageWithResponse
-
-```go
-func (c *Connection) SendFileMessageWithResponse(fileMsgType string, data []byte, filePath string) ([]byte, error)
-```
-
-SendFileMessageWithResponse sends a file and message through the connection. The fileMsgType, message data, and file path need to be passed as parameters. The fileMsgType is used to determine which handler to use on the receiving side. Unlike SendFileMessage, this method also waits for a response from the receiving side.
+transactionFunc is called when the transaction is opened. The stream, transaction name, and transaction id are passed as parameters. The stream is used to send and receive messages and files.
 
 #### Close
 
@@ -424,13 +344,149 @@ func (c *Connection) CloseWithError(message string) error
 
 CloseWithError closes the connection with an error message.
 
+### Stream
+
+```go
+type Stream struct {
+	logLevel int
+	Stream   quic.Stream
+}
+```
+
+Stream is a stream instance that is created when a transaction is opened. Below is a list of methods that can be used with the stream. You can send and receive messages and files multiple times within a single transaction. 
+
+> **Important Note!!**: **Sending and receiving** methods are must be used in **pairs**. If you send a message, you must receive a message. If you send a file, you must receive a file.
+This is because the receiving side is waiting for a request from the sending side. If you don't send a request, the receiving side will wait forever. **Please check the example code for how to use it.**
+
+> Note: Stream is closed automatically when the transaction is closed. So, you may don't need to close it directly.
+
+### Methods
+
+#### New
+
+```go
+func New(logLevel int, stream quic.Stream) (*Stream, error)
+```
+
+New creates a new stream instance. This method is used internally by quics-protocol. So, you may don't need to use it directly.
+
+#### SendMessage
+
+```go
+func (s *Stream) SendBMessage(data []byte) error
+```
+
+SendBMessage sends a bytes message through the connection. The message data needs to be passed as a parameter. This method must be used in pairs with RecvBMessage.
+
+#### SendFile
+
+```go
+func (s *Stream) SendFile(filePath string) error
+```
+
+SendFile sends a file through the connection. The file path needs to be passed as a parameter. The metadata of the file is automatically sent to the receiving side. If the filePath is a directory, the directory is sent as a file.  This method must be used in pairs with RecvFile.
+
+#### SendFileBMessage
+
+```go
+func (s *Stream) SendFileBMessage(data []byte, filePath string) error
+```
+
+SendFileBMessage sends a file with bytes message through the connection. The message data and file path need to be passed as parameters. The metadata of the file is automatically sent to the receiving side. If the filePath is a directory, the directory is sent as a file. This method must be used in pairs with RecvFileBMessage.
+
+#### RecvBMessage
+
+```go
+func (s *Stream) RecvBMessage() ([]byte, error)
+```
+
+RecvBMessage receives a bytes message through the connection. The message data is returned as a result. This method must be used in pairs with SendBMessage.
+
+#### RecvFile
+
+```go
+func (s *Stream) RecvFile() (*fileinfo.FileInfo, io.Reader, error)
+```
+
+RecvFile receives a file through the connection. The file metadata and file data are returned as a result. This method must be used in pairs with SendFile.
+
+> Note: The file data is returned as an io.Reader type object. So, you must read this to receive the file. If you don't read it, the receiving side will wait forever.
+
+> Tip: You can use the [WriteFileWithInfo](#writefilewithinfo) method to wrtie the file with metadata to the disk. See the example code for more details.
+
+#### RecvFileBMessage
+
+```go
+func (s *Stream) RecvFileBMessage() ([]byte, *fileinfo.FileInfo, io.Reader, error)
+```
+
+RecvFileBMessage receives a file with bytes message through the connection. The message data, file metadata, and file data are returned as a result. This method must be used in pairs with SendFileBMessage.
+
+> Note: The file data is returned as an io.Reader type object. So, you must read this to receive the file. If you don't read it, the receiving side will wait forever.
+
+> Tip: You can use the [WriteFileWithInfo](#writefilewithinfo) method to wrtie the file with metadata to the disk. See the example code for more details.
+
+#### Close
+
+```go
+func (c *Connection) Close() error
+```
+
+Close closes the stream. Stream is closed automatically when the transaction is closed. So, you may don't need to use it directly. 
+
+### FileInfo
+
+```go
+type FileInfo struct {
+	Name    string
+	Size    int64
+	Mode    os.FileMode
+	ModTime time.Time
+	IsDir   bool
+}
+```
+
+FileInfo is a file metadata structure. It is used to send and receive file metadata through the connection. You can get this struct as a result when receiving a file through the connection.
+
+### Methods
+
+#### WriteFileWithInfo
+
+```go
+func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) error
+```
+
+WriteFileWithInfo writes the file with metadata to the disk. The file path and file data(io.Reader type) need to be passed as parameters.
+
+This method creates a directory if the directory does not exist or received file is directory. If the file already exists, it will be overwritten.
+
+#### ToProtobuf
+
+```go
+func (f *FileInfo) ToProtobuf() (*pb.FileInfo, error)
+```
+
+ToProtobuf converts the FileInfo to protobuf format. This method is used internally by quics-protocol. So, you may don't need to use it directly.
+
 ## Design
 
-**quics-protocol** largely consists of quics-protocol, connection, and handler. The quics-protocol is a library for communication between a server and a client. The communication is initiated by opening a port on the server using the Listen method and dialing on the client. 
+**quics-protocol** largely consists of quics-protocol, connection, stream, and handler. The quics-protocol is a library for communication between a server and a client. The communication is initiated by opening a port on the server using the Listen method and dialing on the client. 
 
-The connection is a connection instance that is created when a client connects to a server. After connection is established, connection instance is passed to the handler's RouteConnection method. 
+The connection is a connection instance that is created when a client connects to a server. After connection is established, connection instance is passed to the handler's RouteTransaction method. 
+
+The stream is a stream instance that is created when a transaction is opened. The stream is used to send and receive messages and files. Sending and receiving methods are must be used in pairs.
 
 The handler is created when quics-protocol instance is created. It is used to handle messages and files received from the client. But handler is only used internally by quics-protocol. So, you may don't need to use it directly.
+
+### Transaction and Request
+
+**quics-protocol** uses the concept of transactions and requests. The transaction is a frame of streams in the QUIC protocol that tracks the byte range of each stream separately. This allows multiple transactions to be sent over a single connection in parallel, and requests to be sent and received synchronously within a single transaction.
+
+The request is the unit of sending a message or file over a transaction (stream). Multiple requests can be sent or received within a single transaction, but the sender and receiver must be committed to the order in which they are sent and received. If the order is not guaranteed, the receiving side will wait forever. 
+
+Below is a diagram of the transaction and request that used in [usage example code](#usage).
+
+![transaction](https://github.com/quic-s/quics-protocol/assets/20539422/841509e5-72a3-404f-81ca-4a22aaebe5b9)
 
 ### protocol data structure
 
@@ -440,40 +496,36 @@ Google's protobuf library is used to design protocol data. The protocol data str
 
 ```protobuf
 message Header {
-    MessageType messageType = 1;
-    string requestType = 2;
-    bytes requestId = 3;
+    RequestType requestType = 1;
+    bytes requestId = 2;
 }
 
-enum MessageType {
+enum RequestType {
     UNKNOWN = 0;
-    MESSAGE = 1;
-    FILE = 2;
-    FILE_MESSAGE = 3;
-    MESSAGE_W_RESPONSE = 4;
-    FILE_W_RESPONSE = 5;
-    FILE_MESSAGE_W_RESPONSE = 6;
-    RESPONSE_MESSAGE = 7;
-    RESPONSE_FILE = 8;
-    RESPONSE_FILE_MESSAGE = 9;
+    TRANSACTION = 1;
+    // BMESSAGE means a bytes message
+    BMESSAGE = 2;
+    FILE = 3;
+    FILE_BMESSAGE = 4;
 }
 
-message Message {
-    bytes data = 1;
+message Transaction {
+    string transactionName = 1;
+    bytes transactionID = 2;
 }
 
 message FileInfo {
-    bytes fileInfo = 1;
-}
-
-message Response {
-    bytes data = 1;
+    string name = 1;
+    int64 size = 2;
+    int32 mode = 3;
+    bytes modTime = 4;
+    bool isDir = 5;
 }
 ```
 
 When data is actually transmitted through the quic protocol, it is transmitted as a byte stream in the form below. 
 
-- Message
+- BMessage
 
 ```
  0                   1
@@ -489,7 +541,7 @@ When data is actually transmitted through the quic protocol, it is transmitted a
 |           (32 bits)           |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 /                               /
-\            Message            \
+\            BMessage           \
 /                               /
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
@@ -498,13 +550,11 @@ Above structure is case of sending message.
 
 The header length word is 16 bits. It indicates the length of the following Header message. The Header is in protocol buffer format. 
 
-The Header describes the message type, request type, and request id. The message type is specified the data structure(message, file, or file with message). 
+The Header describes the request type, and request id. The request type is specified the data structure(bmessage, file, or file with bmessage). 
 
-The request type is specified the handler to use on the receiving side. The request id is used to match the response from the receiving side.
+Message length word is 32 bits. It indicates the length of the following BMessage message. So, the maximum size of the bmessage is 4GB.
 
-Message length word is 32 bits. It indicates the length of the following Message message. So, the maximum size of the message is 4GB.
-
-The Message is just bytes data. So, user's need to serialize and deserialize the data.
+The BMessage is just bytes data. So, users need to serialize and deserialize the data.
 
 - File
 
@@ -539,7 +589,7 @@ After the file info, the file data is followed. File data is byte data equal to 
 
 Because the file can be large, it is passed as a parameter to the handler function as an io.Reader type object. Users can read this and receive the file.
 
-- File with message
+- File with bmessage
 
 ```
  0                   1
@@ -555,7 +605,7 @@ Because the file can be large, it is passed as a parameter to the handler functi
 |           (32 bits)           |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 /                               /
-\            Message            \
+\            BMessage           \
 /                               /
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |         File Info Length      |
@@ -576,12 +626,6 @@ The file with message is the combination form of message and file. The header an
 The file info and file are the same as the file above.
 
 It can be seen as simply a form in which messages and files are delivered at once as a transaction.
-
-- Response
-
-Response is a same form as message. The only difference is that the message type is different.
-
-Because the response is just bytes data, it need to be serialized and deserialized by user.
 
 ## Contribute
 
