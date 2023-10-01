@@ -80,7 +80,7 @@ func TestServerClient(t *testing.T) {
 		}
 
 		// wait for all stream is sent to server
-		time.Sleep(4 * time.Second)
+		time.Sleep(3 * time.Second)
 		conn.Close()
 	})
 

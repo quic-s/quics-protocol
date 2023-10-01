@@ -16,9 +16,7 @@ func main() {
 	}
 
 	err = quicServer.RecvTransactionHandleFunc("test", func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) {
-		log.Println("quics-server: ", "recv transaction from client")
-		log.Println("quics-server: ", "transactionName: ", transactionName)
-		log.Println("quics-server: ", "transactionID: ", string(transactionID))
+		log.Println("quics-server: ", "message received ", conn.Conn.RemoteAddr().String())
 
 		data, err := stream.RecvBMessage()
 		if err != nil {
@@ -27,12 +25,30 @@ func main() {
 		}
 		log.Println("quics-server: ", "recv message from client")
 		log.Println("quics-server: ", "message: ", string(data))
+		if string(data) != "send message" {
+			log.Println("quics-server: Recieved message is not inteded message.")
+			return
+		}
 
-		err = stream.SendBMessage([]byte("test message"))
+		err = stream.SendBMessage([]byte("return message"))
 		if err != nil {
 			log.Println("quics-server: ", err)
 			return
 		}
+
+		fileInfo, fileContent, err := stream.RecvFile()
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "file received")
+
+		err = fileInfo.WriteFileWithInfo("example/server/received.txt", fileContent)
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return
+		}
+		log.Println("quics-server: ", "file saved")
 	})
 	if err != nil {
 		log.Println("quics-server: ", err)

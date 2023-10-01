@@ -2,8 +2,10 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net"
+	"time"
 
 	qp "github.com/quic-s/quics-protocol"
 )
@@ -32,7 +34,7 @@ func main() {
 		log.Println("quics-client: ", "transactionName: ", transactionName)
 		log.Println("quics-client: ", "transactionID: ", string(transactionID))
 
-		err := stream.SendBMessage([]byte("test message"))
+		err := stream.SendBMessage([]byte("send message"))
 		if err != nil {
 			log.Println("quics-client: ", err)
 			return err
@@ -45,8 +47,22 @@ func main() {
 		}
 		log.Println("quics-client: ", "recv message from server")
 		log.Println("quics-client: ", "message: ", string(data))
+		if string(data) != "return message" {
+			return fmt.Errorf("quics-client: Received message is not the intended message")
+		}
+
+		log.Println("quics-client: ", "send file to server")
+		err = stream.SendFile("test/test/test.txt")
+		if err != nil {
+			log.Println("quics-client: ", err)
+			return err
+		}
+
+		log.Println("quics-client: ", "transaction finished")
 		return nil
 	})
 
+	// wait for all stream is sent to server
+	time.Sleep(3 * time.Second)
 	conn.Close()
 }
