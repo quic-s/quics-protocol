@@ -18,8 +18,8 @@ type BufferedWriteCloser struct {
 	io.Closer
 }
 
-func NewQLogTracer() func(context.Context, logging.Perspective, quic.ConnectionID) logging.ConnectionTracer {
-	return func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) logging.ConnectionTracer {
+func NewQLogTracer() func(context.Context, logging.Perspective, quic.ConnectionID) *logging.ConnectionTracer {
+	return func(ctx context.Context, p logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
 		filename := fmt.Sprintf("client_%x.qlog", connID)
 		f, err := os.Create(filename)
 		if err != nil {
