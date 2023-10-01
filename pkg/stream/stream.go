@@ -16,11 +16,16 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Stream is a stream instance that is created when a transaction is opened.
+// You can send and receive messages and files multiple times within a single transaction.
 type Stream struct {
 	logLevel int
 	Stream   quic.Stream
 }
 
+// New creates a new stream instance.
+// This method is used internally by quics-protocol.
+// So, you may don't need to use it directly.
 func New(logLevel int, stream quic.Stream) (*Stream, error) {
 	if stream == nil {
 		return nil, fmt.Errorf("stream is nil")
@@ -31,6 +36,9 @@ func New(logLevel int, stream quic.Stream) (*Stream, error) {
 	}, nil
 }
 
+// Close closes the stream.
+// Stream is closed automatically when the transaction is closed.
+// So, you may don't need to use it directly.
 func (s *Stream) Close() error {
 	err := s.Stream.Close()
 	if err != nil {
@@ -39,6 +47,9 @@ func (s *Stream) Close() error {
 	return nil
 }
 
+// SendBMessage sends a bytes message through the connection.
+// The message data needs to be passed as a parameter.
+// This method must be used in pairs with RecvBMessage.
 func (s *Stream) SendBMessage(data []byte) error {
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
@@ -59,6 +70,10 @@ func (s *Stream) SendBMessage(data []byte) error {
 	return nil
 }
 
+// SendFile sends a file through the connection. The file path needs to be passed as a parameter.
+// The metadata of the file is automatically sent to the receiving side.
+// If the filePath is a directory, the directory is sent as a file.
+// This method must be used in pairs with RecvFile.
 func (s *Stream) SendFile(filePath string) error {
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
@@ -84,6 +99,11 @@ func (s *Stream) SendFile(filePath string) error {
 	return nil
 }
 
+// SendFileBMessage sends a file with bytes message through the connection.
+// The message data and file path need to be passed as parameters.
+// The metadata of the file is automatically sent to the receiving side.
+// If the filePath is a directory, the directory is sent as a file.
+// This method must be used in pairs with RecvFileBMessage.
 func (s *Stream) SendFileBMessage(data []byte, filePath string) error {
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
@@ -110,6 +130,9 @@ func (s *Stream) SendFileBMessage(data []byte, filePath string) error {
 	return nil
 }
 
+// RecvBMessage receives a bytes message through the connection.
+// The message data is returned as a result.
+// This method must be used in pairs with SendBMessage.
 func (s *Stream) RecvBMessage() ([]byte, error) {
 	header, err := ReadHeader(s)
 	if err != nil {
@@ -127,6 +150,9 @@ func (s *Stream) RecvBMessage() ([]byte, error) {
 	return message, nil
 }
 
+// RecvFile receives a file through the connection.
+// The file metadata and file data are returned as a result.
+// This method must be used in pairs with SendFile.
 func (s *Stream) RecvFile() (*fileinfo.FileInfo, io.Reader, error) {
 	header, err := ReadHeader(s)
 	if err != nil {
@@ -144,6 +170,9 @@ func (s *Stream) RecvFile() (*fileinfo.FileInfo, io.Reader, error) {
 	return fileInfo, fileReader, nil
 }
 
+// RecvFileBMessage receives a file with bytes message through the connection.
+// The message data, file metadata, and file data are returned as a result.
+// This method must be used in pairs with SendFileBMessage.
 func (s *Stream) RecvFileBMessage() ([]byte, *fileinfo.FileInfo, io.Reader, error) {
 	header, err := ReadHeader(s)
 	if err != nil {

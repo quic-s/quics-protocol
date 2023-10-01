@@ -10,6 +10,9 @@ import (
 	pb "github.com/quic-s/quics-protocol/proto/v1"
 )
 
+// FileInfo is a file metadata structure.
+// It is used to send and receive file metadata through the connection.
+// You can get this struct as a result when receiving a file through the connection.
 type FileInfo struct {
 	Name    string
 	Size    int64
@@ -18,7 +21,7 @@ type FileInfo struct {
 	IsDir   bool
 }
 
-// Encode your own type using gob
+// Create new FileInfo instance from os.FileInfo.
 func NewFromOSFileInfo(src os.FileInfo) (*FileInfo, error) {
 	fileInfo := &FileInfo{
 		Name:    src.Name(),
@@ -30,6 +33,7 @@ func NewFromOSFileInfo(src os.FileInfo) (*FileInfo, error) {
 	return fileInfo, nil
 }
 
+// Create new FileInfo instance from protobuf.
 func NewFromProtobuf(src *pb.FileInfo) (*FileInfo, error) {
 	modTime := time.Time{}
 	err := modTime.GobDecode(src.ModTime)
@@ -48,6 +52,7 @@ func NewFromProtobuf(src *pb.FileInfo) (*FileInfo, error) {
 	return fileInfo, nil
 }
 
+// Convert FileInfo to protobuf.
 func (f *FileInfo) ToProtobuf() (*pb.FileInfo, error) {
 	gobModTime, err := f.ModTime.GobEncode()
 	if err != nil {
@@ -64,7 +69,12 @@ func (f *FileInfo) ToProtobuf() (*pb.FileInfo, error) {
 	return fileInfo, nil
 }
 
+// WriteFileWithInfo writes the file with metadata to the disk.
+// The file path and file data(io.Reader type) need to be passed as parameters.
+// This method creates a directory if the directory does not exist or received file is directory.
+// If the file already exists, it will be overwritten.
 func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) error {
+	// When the file is a directory, create the directory and return.
 	if f.IsDir {
 		err := os.MkdirAll(filePath, f.Mode)
 		if err != nil {
@@ -74,6 +84,8 @@ func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) err
 		if err != nil {
 			return err
 		}
+
+		// Set file metadata.
 		err = file.Chmod(f.Mode)
 		if err != nil {
 			return err
@@ -85,8 +97,12 @@ func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) err
 		return nil
 	}
 
+	// When the file is not a directory, create the file and write the file content.
+
+	// Open file with O_TRUNC flag to overwrite the file when the file already exists.
 	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, f.Mode)
 	if err != nil {
+		// If the file does not exist, create the file.
 		if os.IsNotExist(err) {
 			dir, _ := filepath.Split(filePath)
 			if dir != "" {
@@ -104,6 +120,7 @@ func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) err
 		}
 	}
 
+	// Write file content.
 	n, err := io.Copy(file, fileContent)
 	if err != nil {
 		return err
@@ -112,6 +129,7 @@ func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) err
 		return fmt.Errorf("file content size is not equal with fileinfo.size")
 	}
 
+	// Set file metadata.
 	err = file.Chmod(f.Mode)
 	if err != nil {
 		return err
