@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/quic-go/quic-go"
+	qpErr "github.com/quic-s/quics-protocol/pkg/error"
 	qpLog "github.com/quic-s/quics-protocol/pkg/log"
 	"github.com/quic-s/quics-protocol/pkg/types/fileinfo"
 	pb "github.com/quic-s/quics-protocol/proto/v1"
@@ -88,6 +89,10 @@ func (s *Stream) SendFile(filePath string) error {
 
 	err = WriteFile(s, filePath)
 	if err != nil {
+		if err == qpErr.ErrFileModifiedDuringTransfer {
+			s.Stream.CancelWrite(qpErr.FileModifiedDuringTransferCode)
+			return err
+		}
 		s.Stream.CancelWrite(0)
 		return err
 	}
@@ -124,6 +129,10 @@ func (s *Stream) SendFileBMessage(data []byte, filePath string) error {
 
 	err = WriteFile(s, filePath)
 	if err != nil {
+		if err == qpErr.ErrFileModifiedDuringTransfer {
+			s.Stream.CancelWrite(qpErr.FileModifiedDuringTransferCode)
+			return err
+		}
 		s.Stream.CancelWrite(0)
 		return err
 	}
@@ -305,6 +314,16 @@ func WriteFile(s *Stream, filePath string) error {
 			log.Println("quics-protocol: ", "sent", num, "bytes")
 		}
 	}
+
+	afterFileInfo, err := file.Stat()
+	if err != nil {
+		log.Println("quics-protocol: ", err)
+		return err
+	}
+
+	if osFileInfo.ModTime() != afterFileInfo.ModTime() || osFileInfo.Size() != afterFileInfo.Size() || osFileInfo.Mode() != afterFileInfo.Mode() {
+		return qpErr.ErrFileModifiedDuringTransfer
+	}
 	return nil
 }
 
@@ -446,8 +465,8 @@ func ReadFile(s *Stream) (*fileinfo.FileInfo, io.Reader, error) {
 	if s.logLevel <= qpLog.INFO {
 		log.Println("quics-protocol: ", "init file reader with size", fileInfo.Size)
 	}
-
-	return fileInfo, fileReader, nil
+	fileBufReader := bufio.NewReader(fileReader)
+	return fileInfo, fileBufReader, nil
 }
 
 func ReadTransaction(s *Stream) (*pb.Transaction, error) {
