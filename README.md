@@ -8,7 +8,10 @@ It uses the [quic-go](https://github.com/quic-go/quic-go) library to implement Q
 
 ## Features
 
-- Open 
+- Open multiple transactions over a single connection
+- Send and receive bytes message
+- Send and receive file
+- Send and receive file with bytes message
 
 ## Usage
 
