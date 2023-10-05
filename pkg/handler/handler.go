@@ -34,26 +34,16 @@ func New(loglevel int, ctx context.Context, cancel context.CancelFunc) *Handler 
 
 func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 	for {
-		stream, err := conn.Conn.AcceptStream(h.ctx)
+		stream, err := h.RecvTransaction(conn)
 		if err != nil {
 			log.Println("quics-protocol: ", err)
 			return err
 		}
-		if h.logLevel <= qpLog.INFO {
-			log.Println("quics-protocol: ", "stream accepted")
-		}
-
 		go func() {
-			newStream, err := qpStream.New(h.logLevel, stream)
+			transaction, err := qpConn.RecvTransactionHandshake(stream)
 			if err != nil {
 				log.Println("quics-protocol: ", err)
-				newStream.Close()
-				return
-			}
-			transaction, err := qpConn.RecvTransactionHandshake(newStream)
-			if err != nil {
-				log.Println("quics-protocol: ", err)
-				newStream.Close()
+				err := stream.Close()
 				if err != nil {
 					log.Println("quics-protocol: ", err)
 				}
@@ -62,15 +52,33 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 			if h.logLevel <= qpLog.INFO {
 				log.Println("quics-protocol: ", "transaction accepted")
 			}
-
 			if h.transactionHandler[transaction.TransactionName] == nil {
 				log.Println("quics-protocol: ", "handler for transaction ", transaction.TransactionName, " is not set. Use 'default' handler.")
-				h.transactionHandler["default"](conn, newStream, transaction.TransactionName, transaction.TransactionID)
+				h.transactionHandler["default"](conn, stream, transaction.TransactionName, transaction.TransactionID)
 			} else {
-				h.transactionHandler[transaction.TransactionName](conn, newStream, transaction.TransactionName, transaction.TransactionID)
+				h.transactionHandler[transaction.TransactionName](conn, stream, transaction.TransactionName, transaction.TransactionID)
 			}
 		}()
 	}
+}
+
+func (h *Handler) RecvTransaction(conn *qpConn.Connection) (*qpStream.Stream, error) {
+	stream, err := conn.Conn.AcceptStream(h.ctx)
+	if err != nil {
+		log.Println("quics-protocol: ", err)
+		return nil, err
+	}
+	if h.logLevel <= qpLog.INFO {
+		log.Println("quics-protocol: ", "stream accepted")
+	}
+	newStream, err := qpStream.New(h.logLevel, stream)
+	if err != nil {
+		log.Println("quics-protocol: ", err)
+		newStream.Close()
+		return nil, err
+	}
+
+	return newStream, nil
 }
 
 func (h *Handler) AddTransactionHandleFunc(transactionName string, handler func(conn *qpConn.Connection, stream *qpStream.Stream, transactionName string, transactionID []byte)) error {

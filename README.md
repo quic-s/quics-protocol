@@ -254,6 +254,20 @@ Listen starts a server listening for incoming connections on the UDP address add
 
 > Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
 
+#### ListenWithTransaction
+
+```go
+func (q *QP) ListenWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error, connHandler func(conn *Connection)) error
+```
+
+ListenWithTransaction starts a server listening for incoming connections on the UDP address addr with TLS configuration tlsConf. Unlike Listen, this method also opens a transaction to the client. So, the transaction function is needed as a parameter.
+
+This can be used to send authentication information and more to the client in a transaction when connecting to the client.
+
+> Note: This method is paired with DialWithTransaction. So, you must use DialWithTransaction on the client side.
+
+> Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
+
 #### Dial
 
 ```go
@@ -273,6 +287,8 @@ func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, tran
 DialWithTransaction connects to the address addr on the named network net with TLS configuration tlsConf. Unlike Dial, this method also opens a transaction to the server. So, the transaction name and transaction function are needed as parameters.
 
 This can be used to send authentication information and more to the server in a transaction when connecting to the server. 
+
+> Note: This method is paired with ListenWithTransaction. So, you must use ListenWithTransaction on the server side.
 
 > Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
 
