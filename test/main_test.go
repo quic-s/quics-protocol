@@ -37,7 +37,27 @@ func TestServerClient(t *testing.T) {
 			NextProtos:         []string{"quics-protocol"},
 		}
 		// start client
-		conn, err := quicClient.Dial(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf)
+		conn, err := quicClient.DialWithTransaction(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+			data, err := stream.RecvBMessage()
+			if err != nil {
+				log.Println("quics-client: ", err)
+				return err
+			}
+			log.Println("quics-client: ", "recv message from client")
+			log.Println("quics-client: ", "message: ", string(data))
+			if string(data) != "send message" {
+				log.Println("quics-client: Recieved message is not inteded message.")
+				return err
+			}
+
+			err = stream.SendBMessage([]byte("return message"))
+			if err != nil {
+				log.Println("quics-client: ", err)
+				return err
+			}
+			return nil
+		})
+
 		if err != nil {
 			log.Println("quics-client: ", err)
 		}
@@ -147,7 +167,28 @@ func runServer(t *testing.T) (*qp.QP, error) {
 		}
 
 		// start server
-		quicServer.Listen(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection) {
+		quicServer.ListenWithTransaction(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+			log.Println("quics-server: ", "transactionName: ", transactionName)
+			log.Println("quics-server: ", "transactionID: ", string(transactionID))
+
+			err := stream.SendBMessage([]byte("send message"))
+			if err != nil {
+				log.Println("quics-server: ", err)
+				return err
+			}
+
+			data, err := stream.RecvBMessage()
+			if err != nil {
+				log.Println("quics-server: ", err)
+				return err
+			}
+			log.Println("quics-server: ", "recv message from client")
+			log.Println("quics-server: ", "message: ", string(data))
+			if string(data) != "return message" {
+				return fmt.Errorf("quics-server: Received message is not the intended message.")
+			}
+			return nil
+		}, func(conn *qp.Connection) {
 			log.Println("quics-server: ", "new connection ", conn.Conn.RemoteAddr().String())
 		})
 	}()
