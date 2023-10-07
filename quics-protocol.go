@@ -245,7 +245,7 @@ func (q *QP) Close() error {
 // RecvTransactionHandleFunc sets the handler function for receiving transactions from the client.
 // The transaction name and callback function are needed as parameters.
 // The transaction name is used to determine which handler to use on the receiving side.
-func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error {
+func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte) error) error {
 	err := q.handler.AddTransactionHandleFunc(transactionName, callback)
 	if err != nil {
 		return err
@@ -256,10 +256,17 @@ func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(con
 // DefaultRecvTransactionHandleFunc sets the default handler function for receiving transactions from the client.
 // The callback function is needed as a parameter.
 // The default handler is used when the transaction name is not set or the transaction name is not found.
-func (q *QP) DefaultRecvTransactionHandleFunc(callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error {
+func (q *QP) DefaultRecvTransactionHandleFunc(callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte) error) error {
 	err := q.handler.DefaultTransactionHandleFunc(callback)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// GetErrChan returns the error channel of the quics-protocol instance.
+// This channel is used to receive errors when errors occur in the receive transaction handler function.
+// This is optional. If you do not need to receive errors, you do not need to use this channel.
+func (q *QP) GetErrChan() chan error {
+	return q.handler.GetErrChan()
 }

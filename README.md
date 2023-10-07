@@ -191,6 +191,9 @@ func main() {
 	* [Dial](#dial)
 	* [DialWithTransaction](#dialwithtransaction)
 	* [Close](#close)
+	* [RecvTransactionHandleFunc](#recvtransactionhandlefunc)
+	* [DefaultRecvTransactionHandleFunc](#defaultrecvtransactionhandlefunc)
+	* [GetErrChan](#geterrchan)
 * [Connection](#connection)
 	* [New](#new-1)
 	* [OpenTransaction](#opentransaction)
@@ -303,7 +306,7 @@ Close closes the quics-protocol instance.
 #### RecvTransactionHandleFunc
 
 ```go
-func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error
+func (q *QP) RecvTransactionHandleFunc(transactionName string, callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte) error) error
 ```
 
 RecvTransactionHandleFunc sets the handler function for receiving transactions from the client. The transaction name and callback function are needed as parameters. The transaction name is used to determine which handler to use on the receiving side.
@@ -311,10 +314,19 @@ RecvTransactionHandleFunc sets the handler function for receiving transactions f
 #### DefaultRecvTransactionHandleFunc
 
 ```go
-func (q *QP) DefaultRecvTransactionHandleFunc(callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte)) error
+func (q *QP) DefaultRecvTransactionHandleFunc(callback func(conn *Connection, stream *Stream, transactionName string, transactionID []byte) error) error
 ```
 
 DefaultRecvTransactionHandleFunc sets the default handler function for receiving transactions from the client. The callback function is needed as a parameter. The default handler is used when the transaction name is not set or the transaction name is not found.
+
+#### GetErrChan
+
+```go
+func (q *QP) GetErrChan() chan error
+```
+
+GetErrChan returns the error channel of the quics-protocol instance. The error channel is used to receive errors that occur in the receiving transaction handler function(The function that is set by RecvTransactionHandleFunc or DefaultRecvTransactionHandleFunc).
+This is optional. If you do not need to receive errors, you do not need to use this channel.
 
 ### Connection
 
