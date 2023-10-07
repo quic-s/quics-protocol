@@ -159,7 +159,7 @@ func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(
 // This method is paired with DialWithTransaction. So, you must use DialWithTransaction on the client side.
 // Return error.
 // Need to set receive handler using RecvTransactionHandleFunc before listening.
-func (q *QP) ListenWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error, connHandler func(conn *Connection)) error {
+func (q *QP) ListenWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionFunc func(conn *Connection, stream *Stream, transactionName string, transactionID []byte) error) error {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
@@ -215,7 +215,7 @@ func (q *QP) ListenWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, tr
 				log.Println("quics-protocol: ", "transaction accepted")
 			}
 
-			err = transactionFunc(stream, transaction.TransactionName, transaction.TransactionID)
+			err = transactionFunc(newConn, stream, transaction.TransactionName, transaction.TransactionID)
 			if err != nil {
 				log.Println("quics-protocol: ", err)
 				newConn.CloseWithError(err.Error())
@@ -223,7 +223,6 @@ func (q *QP) ListenWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, tr
 			}
 
 			go q.handler.RouteTransaction(newConn)
-			connHandler(newConn)
 		}()
 	}
 }
