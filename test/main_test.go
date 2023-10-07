@@ -167,7 +167,7 @@ func runServer(t *testing.T) (*qp.QP, error) {
 		}
 
 		// start server
-		quicServer.ListenWithTransaction(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+		quicServer.ListenWithTransaction(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) error {
 			log.Println("quics-server: ", "transactionName: ", transactionName)
 			log.Println("quics-server: ", "transactionID: ", string(transactionID))
 
@@ -188,8 +188,6 @@ func runServer(t *testing.T) (*qp.QP, error) {
 				return fmt.Errorf("quics-server: Received message is not the intended message.")
 			}
 			return nil
-		}, func(conn *qp.Connection) {
-			log.Println("quics-server: ", "new connection ", conn.Conn.RemoteAddr().String())
 		})
 	}()
 	return quicServer, nil
