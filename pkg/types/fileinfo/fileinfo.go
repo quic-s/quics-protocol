@@ -1,7 +1,7 @@
 package fileinfo
 
 import (
-	"fmt"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -126,7 +126,7 @@ func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) err
 		return err
 	}
 	if n != f.Size {
-		return fmt.Errorf("file content size is not equal with fileinfo.size")
+		return errors.New("file content size is not equal with fileinfo.size")
 	}
 
 	// Set file metadata.

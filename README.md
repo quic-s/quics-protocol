@@ -105,12 +105,14 @@ func main() {
 		NextProtos:   []string{"quics-protocol"},
 	}
 	// start server
-	quicServer.Listen(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection) {
+	err = quicServer.Listen(":18080", tlsConf, func(conn *qp.Connection) {
 		log.Println("quics-server: ", "new connection ", conn.Conn.RemoteAddr().String())
 	})
+	if err != nil {
+		log.Println("quics-server: ", err)
+		return
+	}
 }
-
-
 ```
 
 ### Client
@@ -140,7 +142,7 @@ func main() {
 		NextProtos:         []string{"quics-protocol"},
 	}
 	// start client
-	conn, err := quicClient.Dial(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf)
+	conn, err := quicClient.Dial("ip6-localhost", 18080, tlsConf)
 	if err != nil {
 		log.Println("quics-client: ", err)
 	}
@@ -166,7 +168,7 @@ func main() {
 		log.Println("quics-client: ", "recv message from server")
 		log.Println("quics-client: ", "message: ", string(data))
 		if string(data) != "return message" {
-			return fmt.Errorf("quics-client: Received message is not the intended message")
+			return errors.New("quics-client: Received message is not the intended message")
 		}
 
 		log.Println("quics-client: ", "send file to server")
@@ -253,20 +255,20 @@ const (
 #### Listen
 
 ```go
-func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *qp.Connection)) error
+func (q *QP) Listen(address string, tlsConf *tls.Config, connHandler func(conn *Connection))
 ```
 
-Listen starts a server listening for incoming connections on the UDP address addr with TLS configuration tlsConf.
+Listen starts a server listening for incoming connections on the UDP address with TLS configuration tlsConf.
 
 > Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
 
 #### ListenWithTransaction
 
 ```go
-func (q *QP) ListenWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error, connHandler func(conn *Connection)) error
+func (q *QP) ListenWithTransaction(address string, tlsConf *tls.Config, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error, connHandler func(conn *Connection)) error
 ```
 
-ListenWithTransaction starts a server listening for incoming connections on the UDP address addr with TLS configuration tlsConf. Unlike Listen, this method also opens a transaction to the client. So, the transaction function is needed as a parameter.
+ListenWithTransaction starts a server listening for incoming connections on the UDP address with TLS configuration tlsConf. Unlike Listen, this method also opens a transaction to the client. So, the transaction function is needed as a parameter.
 
 This can be used to send authentication information and more to the client in a transaction when connecting to the client.
 
@@ -277,20 +279,20 @@ This can be used to send authentication information and more to the client in a 
 #### Dial
 
 ```go
-func (qp *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*qp.Connection, error)
+func (qp *QP) Dial(host string, port int, tlsConf *tls.Config) (*Connection, error)
 ```
 
-Dial connects to the address addr on the named network net with TLS configuration tlsConf.
+Dial connects to the address(parameter as host and port) on the named network net with TLS configuration tlsConf.
 
 > Note: Receiving handler must be set before calling this method. (ex: If you want to receive transactions from the client after establish connections, use RecvTransactionHandleFunc.)
 
 #### DialWithTransaction
 
 ```go
-func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionName string, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error) (*Connection, error) 
+func (q *QP) DialWithTransaction(host string, port int, tlsConf *tls.Config, transactionName string, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error) (*Connection, error) 
 ```
 
-DialWithTransaction connects to the address addr on the named network net with TLS configuration tlsConf. Unlike Dial, this method also opens a transaction to the server. So, the transaction name and transaction function are needed as parameters.
+DialWithTransaction connects to the address(parameter as host and port) on the named network net with TLS configuration tlsConf. Unlike Dial, this method also opens a transaction to the server. So, the transaction name and transaction function are needed as parameters.
 
 This can be used to send authentication information and more to the server in a transaction when connecting to the server. 
 
@@ -460,6 +462,16 @@ RecvFileBMessage receives a file with bytes message through the connection. The 
 
 > Tip: You can use the [WriteFileWithInfo](#writefilewithinfo) method to wrtie the file with metadata to the disk. See the example code for more details.
 
+#### SendError
+
+```go
+func (s *Stream) SendError(errorMsg string) error
+```
+Send error sending error message through stream.
+This method handle the Recv method to receive and return any message.
+This allows the receiving party to handle errors or close the stream.
+Even when an error is returned within transactionHandleFunc, this method is used internally to close the stream.
+
 #### Close
 
 ```go
@@ -532,6 +544,7 @@ Google's protobuf library is used to design protocol data. The protocol data str
 message Header {
     RequestType requestType = 1;
     bytes requestId = 2;
+	string error = 3;
 }
 
 enum RequestType {

@@ -2,9 +2,8 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
+	"errors"
 	"log"
-	"net"
 	"time"
 
 	qp "github.com/quic-s/quics-protocol"
@@ -22,7 +21,7 @@ func main() {
 		NextProtos:         []string{"quics-protocol"},
 	}
 	// start client
-	conn, err := quicClient.Dial(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf)
+	conn, err := quicClient.Dial("ip6-localhost", 18080, tlsConf)
 	if err != nil {
 		log.Println("quics-client: ", err)
 	}
@@ -48,7 +47,7 @@ func main() {
 		log.Println("quics-client: ", "recv message from server")
 		log.Println("quics-client: ", "message: ", string(data))
 		if string(data) != "return message" {
-			return fmt.Errorf("quics-client: Received message is not the intended message")
+			return errors.New("quics-client: Received message is not the intended message")
 		}
 
 		log.Println("quics-client: ", "send file to server")

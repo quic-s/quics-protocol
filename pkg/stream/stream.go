@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -29,7 +30,7 @@ type Stream struct {
 // So, you may don't need to use it directly.
 func New(logLevel int, stream quic.Stream) (*Stream, error) {
 	if stream == nil {
-		return nil, fmt.Errorf("stream is nil")
+		return nil, errors.New("stream is nil")
 	}
 	return &Stream{
 		logLevel: logLevel,
@@ -41,8 +42,32 @@ func New(logLevel int, stream quic.Stream) (*Stream, error) {
 // Stream is closed automatically when the transaction is closed.
 // So, you may don't need to use it directly.
 func (s *Stream) Close() error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	err := s.Stream.Close()
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Send error sending error message through stream.
+// This method tells the Recv method to receive and return any message.
+// This allows the receiving party to handle errors or close the stream.
+// Even when an error is returned within transactionHandleFunc, this method is used internally to close the stream.
+func (s *Stream) SendError(errorMsg string) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		s.Stream.CancelWrite(0)
+		return err
+	}
+	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId, errorMsg)
+	if err != nil {
+		s.Stream.CancelWrite(0)
 		return err
 	}
 	return nil
@@ -52,12 +77,15 @@ func (s *Stream) Close() error {
 // The message data needs to be passed as a parameter.
 // This method must be used in pairs with RecvBMessage.
 func (s *Stream) SendBMessage(data []byte) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
 	}
-	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId)
+	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId, "")
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
@@ -76,12 +104,15 @@ func (s *Stream) SendBMessage(data []byte) error {
 // If the filePath is a directory, the directory is sent as a file.
 // This method must be used in pairs with RecvFile.
 func (s *Stream) SendFile(filePath string) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
 	}
-	err = WriteHeader(s, pb.RequestType_FILE, requestId)
+	err = WriteHeader(s, pb.RequestType_FILE, requestId, "")
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
@@ -110,12 +141,15 @@ func (s *Stream) SendFile(filePath string) error {
 // If the filePath is a directory, the directory is sent as a file.
 // This method must be used in pairs with RecvFileBMessage.
 func (s *Stream) SendFileBMessage(data []byte, filePath string) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
 	}
-	err = WriteHeader(s, pb.RequestType_FILE_BMESSAGE, requestId)
+	err = WriteHeader(s, pb.RequestType_FILE_BMESSAGE, requestId, "")
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
@@ -148,7 +182,7 @@ func (s *Stream) RecvBMessage() ([]byte, error) {
 		return nil, err
 	}
 	if header.RequestType != pb.RequestType_BMESSAGE {
-		return nil, fmt.Errorf("request type is not BMessage")
+		return nil, errors.New("request type is not BMessage")
 	}
 
 	message, err := ReadMessage(s)
@@ -168,7 +202,7 @@ func (s *Stream) RecvFile() (*fileinfo.FileInfo, io.Reader, error) {
 		return nil, nil, err
 	}
 	if header.RequestType != pb.RequestType_FILE {
-		return nil, nil, fmt.Errorf("request type is not File")
+		return nil, nil, errors.New("request type is not File")
 	}
 
 	fileInfo, fileReader, err := ReadFile(s)
@@ -188,7 +222,7 @@ func (s *Stream) RecvFileBMessage() ([]byte, *fileinfo.FileInfo, io.Reader, erro
 		return nil, nil, nil, err
 	}
 	if header.RequestType != pb.RequestType_FILE_BMESSAGE {
-		return nil, nil, nil, fmt.Errorf("request type is not FileBMessage")
+		return nil, nil, nil, errors.New("request type is not FileBMessage")
 	}
 
 	message, err := ReadMessage(s)
@@ -204,10 +238,11 @@ func (s *Stream) RecvFileBMessage() ([]byte, *fileinfo.FileInfo, io.Reader, erro
 	return message, fileInfo, fileReader, nil
 }
 
-func WriteHeader(s *Stream, requestType pb.RequestType, requestId []byte) error {
+func WriteHeader(s *Stream, requestType pb.RequestType, requestId []byte, errorMsg string) error {
 	header := &pb.Header{
 		RequestType: requestType,
 		RequestId:   requestId,
+		Error:       errorMsg,
 	}
 	headerOut, err := proto.Marshal(header)
 	if err != nil {
@@ -294,7 +329,7 @@ func WriteFile(s *Stream, filePath string) error {
 		return err
 	}
 	if n != len(buf) {
-		return fmt.Errorf("write size is not equal to buf size")
+		return errors.New("write size is not equal to buf size")
 	}
 	if s.logLevel <= qpLog.INFO {
 		log.Println("quics-protocol: ", "sent", n, "bytes")
@@ -308,7 +343,7 @@ func WriteFile(s *Stream, filePath string) error {
 			return err
 		}
 		if num != osFileInfo.Size() {
-			return fmt.Errorf("write size is not equal to file size")
+			return errors.New("write size is not equal to file size")
 		}
 		if s.logLevel <= qpLog.INFO {
 			log.Println("quics-protocol: ", "sent", num, "bytes")
@@ -321,7 +356,7 @@ func WriteFile(s *Stream, filePath string) error {
 		return err
 	}
 
-	if osFileInfo.ModTime() != afterFileInfo.ModTime() || osFileInfo.Size() != afterFileInfo.Size() || osFileInfo.Mode() != afterFileInfo.Mode() {
+	if qpFileInfo.ModTime != afterFileInfo.ModTime() || qpFileInfo.Size != afterFileInfo.Size() || qpFileInfo.Mode != afterFileInfo.Mode() {
 		return qpErr.ErrFileModifiedDuringTransfer
 	}
 	return nil
@@ -369,7 +404,7 @@ func ReadHeader(s *Stream) (*pb.Header, error) {
 		return nil, err
 	}
 	if n != 2 {
-		return nil, fmt.Errorf("header size is not 2 bytes")
+		return nil, errors.New("header size is not 2 bytes")
 	}
 	headerSize := uint16(binary.BigEndian.Uint16(headerSizeBuf))
 	headerBuf := make([]byte, headerSize)
@@ -390,6 +425,10 @@ func ReadHeader(s *Stream) (*pb.Header, error) {
 		log.Println("quics-protocol: ", header.RequestType, header.RequestType, header.RequestId)
 	}
 
+	if header.Error != "" {
+		return nil, errors.New(header.Error)
+	}
+
 	return header, nil
 }
 
@@ -404,7 +443,7 @@ func ReadMessage(s *Stream) ([]byte, error) {
 		return nil, err
 	}
 	if n != 4 {
-		return nil, fmt.Errorf("message size is not 4 bytes")
+		return nil, errors.New("message size is not 4 bytes")
 	}
 
 	messageSize := uint32(binary.BigEndian.Uint32(messageSizeBuf))
@@ -434,7 +473,7 @@ func ReadFile(s *Stream) (*fileinfo.FileInfo, io.Reader, error) {
 		return nil, nil, err
 	}
 	if n != 2 {
-		return nil, nil, fmt.Errorf("file info size is not 2 bytes")
+		return nil, nil, errors.New("file info size is not 2 bytes")
 	}
 	fileInfoSize := uint16(binary.BigEndian.Uint16(fileInfoSizeBuf))
 
@@ -480,7 +519,7 @@ func ReadTransaction(s *Stream) (*pb.Transaction, error) {
 		return nil, err
 	}
 	if n != 2 {
-		return nil, fmt.Errorf("transaction size is not 2 bytes")
+		return nil, errors.New("transaction size is not 2 bytes")
 	}
 	transactionSize := uint16(binary.BigEndian.Uint16(transactionSizeBuf))
 
