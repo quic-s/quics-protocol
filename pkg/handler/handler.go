@@ -63,7 +63,10 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 					if h.errChan != nil {
 						h.errChan <- err
 					}
-					stream.Close()
+					err = stream.SendError(err.Error())
+					log.Println("quics-protocol: ", err)
+					err = stream.Close()
+					log.Println("quics-protocol: ", err)
 				}
 			} else {
 				err = h.transactionHandler[transaction.TransactionName](conn, stream, transaction.TransactionName, transaction.TransactionID)
@@ -72,7 +75,10 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 					if h.errChan != nil {
 						h.errChan <- err
 					}
-					stream.Close()
+					err = stream.SendError(err.Error())
+					log.Println("quics-protocol: ", err)
+					err = stream.Close()
+					log.Println("quics-protocol: ", err)
 				}
 			}
 		}()

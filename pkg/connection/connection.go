@@ -74,24 +74,28 @@ func (c *Connection) OpenTransaction(transactionName string, transactionFunc fun
 	}
 	newStream, err := qpStream.New(c.logLevel, stream)
 	if err != nil {
+		newStream.SendError(err.Error())
 		newStream.Close()
 		return err
 	}
 
 	transactionID, err := uuid.New().MarshalBinary()
 	if err != nil {
+		newStream.SendError(err.Error())
 		newStream.Close()
 		return err
 	}
 
 	err = TransactionHandshake(newStream, transactionName, transactionID)
 	if err != nil {
+		newStream.SendError(err.Error())
 		newStream.Close()
 		return err
 	}
 
 	err = transactionFunc(newStream, transactionName, transactionID)
 	if err != nil {
+		newStream.SendError(err.Error())
 		newStream.Close()
 		return err
 	}
@@ -112,7 +116,7 @@ func TransactionHandshake(stream *qpStream.Stream, transactionName string, trans
 	if err != nil {
 		return err
 	}
-	err = qpStream.WriteHeader(stream, pb.RequestType_TRANSACTION, requestId)
+	err = qpStream.WriteHeader(stream, pb.RequestType_TRANSACTION, requestId, "")
 	if err != nil {
 		return err
 	}
@@ -157,7 +161,7 @@ func RecvTransactionHandshake(stream *qpStream.Stream) (*pb.Transaction, error) 
 		return nil, err
 	}
 
-	err = qpStream.WriteHeader(stream, pb.RequestType_TRANSACTION, transaction.TransactionID)
+	err = qpStream.WriteHeader(stream, pb.RequestType_TRANSACTION, transaction.TransactionID, "")
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
-	"net"
 	"sync"
 	"testing"
 	"time"
@@ -37,7 +36,7 @@ func TestServerClient(t *testing.T) {
 			NextProtos:         []string{"quics-protocol"},
 		}
 		// start client
-		conn, err := quicClient.DialWithTransaction(&net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18080}, tlsConf, "test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+		conn, err := quicClient.DialWithTransaction("localhost", 18080, tlsConf, "test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
 			data, err := stream.RecvBMessage()
 			if err != nil {
 				log.Println("quics-client: ", err)
@@ -168,7 +167,7 @@ func runServer(t *testing.T) (*qp.QP, error) {
 		}
 
 		// start server
-		quicServer.ListenWithTransaction(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) error {
+		quicServer.ListenWithTransaction(":18080", tlsConf, func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) error {
 			log.Println("quics-server: ", "transactionName: ", transactionName)
 			log.Println("quics-server: ", "transactionID: ", string(transactionID))
 

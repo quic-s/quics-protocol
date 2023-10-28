@@ -42,8 +42,32 @@ func New(logLevel int, stream quic.Stream) (*Stream, error) {
 // Stream is closed automatically when the transaction is closed.
 // So, you may don't need to use it directly.
 func (s *Stream) Close() error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	err := s.Stream.Close()
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Send error sending error message through stream.
+// This method tells the Recv method to receive and return any message.
+// This allows the receiving party to handle errors or close the stream.
+// Even when an error is returned within transactionHandleFunc, this method is used internally to close the stream.
+func (s *Stream) SendError(errorMsg string) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
+	requestId, err := uuid.New().MarshalBinary()
+	if err != nil {
+		s.Stream.CancelWrite(0)
+		return err
+	}
+	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId, errorMsg)
+	if err != nil {
+		s.Stream.CancelWrite(0)
 		return err
 	}
 	return nil
@@ -53,12 +77,15 @@ func (s *Stream) Close() error {
 // The message data needs to be passed as a parameter.
 // This method must be used in pairs with RecvBMessage.
 func (s *Stream) SendBMessage(data []byte) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
 	}
-	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId)
+	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId, "")
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
@@ -77,12 +104,15 @@ func (s *Stream) SendBMessage(data []byte) error {
 // If the filePath is a directory, the directory is sent as a file.
 // This method must be used in pairs with RecvFile.
 func (s *Stream) SendFile(filePath string) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
 	}
-	err = WriteHeader(s, pb.RequestType_FILE, requestId)
+	err = WriteHeader(s, pb.RequestType_FILE, requestId, "")
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
@@ -111,12 +141,15 @@ func (s *Stream) SendFile(filePath string) error {
 // If the filePath is a directory, the directory is sent as a file.
 // This method must be used in pairs with RecvFileBMessage.
 func (s *Stream) SendFileBMessage(data []byte, filePath string) error {
+	if s == nil || s.Stream == nil {
+		return errors.New("stream is nil")
+	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
 	}
-	err = WriteHeader(s, pb.RequestType_FILE_BMESSAGE, requestId)
+	err = WriteHeader(s, pb.RequestType_FILE_BMESSAGE, requestId, "")
 	if err != nil {
 		s.Stream.CancelWrite(0)
 		return err
@@ -205,10 +238,11 @@ func (s *Stream) RecvFileBMessage() ([]byte, *fileinfo.FileInfo, io.Reader, erro
 	return message, fileInfo, fileReader, nil
 }
 
-func WriteHeader(s *Stream, requestType pb.RequestType, requestId []byte) error {
+func WriteHeader(s *Stream, requestType pb.RequestType, requestId []byte, errorMsg string) error {
 	header := &pb.Header{
 		RequestType: requestType,
 		RequestId:   requestId,
+		Error:       errorMsg,
 	}
 	headerOut, err := proto.Marshal(header)
 	if err != nil {
@@ -389,6 +423,10 @@ func ReadHeader(s *Stream) (*pb.Header, error) {
 	proto.Unmarshal(headerBuf, header)
 	if s.logLevel <= qpLog.INFO {
 		log.Println("quics-protocol: ", header.RequestType, header.RequestType, header.RequestId)
+	}
+
+	if header.Error != "" {
+		return nil, errors.New(header.Error)
 	}
 
 	return header, nil
