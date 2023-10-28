@@ -62,7 +62,6 @@ func (s *Stream) SendError(errorMsg string) error {
 	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId, errorMsg)
@@ -82,18 +81,15 @@ func (s *Stream) SendBMessage(data []byte) error {
 	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 	err = WriteHeader(s, pb.RequestType_BMESSAGE, requestId, "")
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = WriteMessage(s, data)
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 	return nil
@@ -109,22 +105,15 @@ func (s *Stream) SendFile(filePath string) error {
 	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 	err = WriteHeader(s, pb.RequestType_FILE, requestId, "")
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = WriteFile(s, filePath)
 	if err != nil {
-		if err == qpErr.ErrFileModifiedDuringTransfer {
-			s.Stream.CancelWrite(qpErr.FileModifiedDuringTransferCode)
-			return err
-		}
-		s.Stream.CancelWrite(0)
 		return err
 	}
 
@@ -146,28 +135,20 @@ func (s *Stream) SendFileBMessage(data []byte, filePath string) error {
 	}
 	requestId, err := uuid.New().MarshalBinary()
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 	err = WriteHeader(s, pb.RequestType_FILE_BMESSAGE, requestId, "")
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = WriteMessage(s, data)
 	if err != nil {
-		s.Stream.CancelWrite(0)
 		return err
 	}
 
 	err = WriteFile(s, filePath)
 	if err != nil {
-		if err == qpErr.ErrFileModifiedDuringTransfer {
-			s.Stream.CancelWrite(qpErr.FileModifiedDuringTransferCode)
-			return err
-		}
-		s.Stream.CancelWrite(0)
 		return err
 	}
 	return nil
@@ -323,6 +304,9 @@ func WriteFile(s *Stream, filePath string) error {
 	binary.BigEndian.PutUint16(buf[:2], uint16(len(fileInfoOut)))
 	buf = append(buf, fileInfoOut...)
 
+	if s.logLevel <= qpLog.INFO {
+		log.Println("quics-protocol: ", "sending fileInfo ", cap(buf), "bytes")
+	}
 	n, err := s.Stream.Write(buf)
 	if err != nil {
 		log.Println("quics-protocol: ", err)
@@ -335,14 +319,16 @@ func WriteFile(s *Stream, filePath string) error {
 		log.Println("quics-protocol: ", "sent", n, "bytes")
 	}
 
-	if !pbFileInfo.IsDir {
-		fileBuf := bufio.NewReader(file)
-		num, err := io.Copy(s.Stream, fileBuf)
+	if !qpFileInfo.IsDir {
+		if s.logLevel <= qpLog.INFO {
+			log.Println("quics-protocol: ", "sending fileInfo ", qpFileInfo.Size, "bytes")
+		}
+		num, err := io.CopyN(s.Stream, file, qpFileInfo.Size)
 		if err != nil {
 			log.Println("quics-protocol: ", err)
 			return err
 		}
-		if num != osFileInfo.Size() {
+		if num != qpFileInfo.Size {
 			return errors.New("write size is not equal to file size")
 		}
 		if s.logLevel <= qpLog.INFO {
@@ -357,6 +343,8 @@ func WriteFile(s *Stream, filePath string) error {
 	}
 
 	if qpFileInfo.ModTime != afterFileInfo.ModTime() || qpFileInfo.Size != afterFileInfo.Size() || qpFileInfo.Mode != afterFileInfo.Mode() {
+		s.Stream.CancelWrite(qpErr.FileModifiedDuringTransferCode)
+		log.Println("quics-protocol: file is modified during transfer")
 		return qpErr.ErrFileModifiedDuringTransfer
 	}
 	return nil
