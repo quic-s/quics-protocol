@@ -43,18 +43,20 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 			return err
 		}
 		go func() {
+			defer func() {
+				err = stream.Close()
+				log.Println("quics-protocol: ", err)
+			}()
+
 			transaction, err := qpConn.RecvTransactionHandshake(stream)
 			if err != nil {
 				log.Println("quics-protocol: ", err)
-				err := stream.Close()
-				if err != nil {
-					log.Println("quics-protocol: ", err)
-				}
 				return
 			}
 			if h.logLevel <= qpLog.INFO {
 				log.Println("quics-protocol: ", "transaction accepted")
 			}
+
 			if h.transactionHandler[transaction.TransactionName] == nil {
 				log.Println("quics-protocol: ", "handler for transaction ", transaction.TransactionName, " is not set. Use 'default' handler.")
 				err = h.transactionHandler["default"](conn, stream, transaction.TransactionName, transaction.TransactionID)
@@ -76,8 +78,6 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 					err = stream.SendError(err.Error())
 					log.Println("quics-protocol: ", err)
 				}
-				err = stream.Close()
-				log.Println("quics-protocol: ", err)
 			}
 		}()
 	}
