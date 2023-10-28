@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log"
 
 	qpConn "github.com/quic-s/quics-protocol/pkg/connection"
@@ -105,7 +105,7 @@ func (h *Handler) GetErrChan() chan error {
 
 func (h *Handler) AddTransactionHandleFunc(transactionName string, handler func(conn *qpConn.Connection, stream *qpStream.Stream, transactionName string, transactionID []byte) error) error {
 	if transactionName == "default" {
-		return fmt.Errorf("quics-protocol: 'default' is reserved transaction name")
+		return errors.New("quics-protocol: 'default' is reserved transaction name")
 	}
 	h.transactionHandler[transactionName] = handler
 	return nil

@@ -166,7 +166,7 @@ func main() {
 		log.Println("quics-client: ", "recv message from server")
 		log.Println("quics-client: ", "message: ", string(data))
 		if string(data) != "return message" {
-			return fmt.Errorf("quics-client: Received message is not the intended message")
+			return errors.New("quics-client: Received message is not the intended message")
 		}
 
 		log.Println("quics-client: ", "send file to server")

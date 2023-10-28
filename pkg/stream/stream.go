@@ -3,6 +3,7 @@ package stream
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -29,7 +30,7 @@ type Stream struct {
 // So, you may don't need to use it directly.
 func New(logLevel int, stream quic.Stream) (*Stream, error) {
 	if stream == nil {
-		return nil, fmt.Errorf("stream is nil")
+		return nil, errors.New("stream is nil")
 	}
 	return &Stream{
 		logLevel: logLevel,
@@ -148,7 +149,7 @@ func (s *Stream) RecvBMessage() ([]byte, error) {
 		return nil, err
 	}
 	if header.RequestType != pb.RequestType_BMESSAGE {
-		return nil, fmt.Errorf("request type is not BMessage")
+		return nil, errors.New("request type is not BMessage")
 	}
 
 	message, err := ReadMessage(s)
@@ -168,7 +169,7 @@ func (s *Stream) RecvFile() (*fileinfo.FileInfo, io.Reader, error) {
 		return nil, nil, err
 	}
 	if header.RequestType != pb.RequestType_FILE {
-		return nil, nil, fmt.Errorf("request type is not File")
+		return nil, nil, errors.New("request type is not File")
 	}
 
 	fileInfo, fileReader, err := ReadFile(s)
@@ -188,7 +189,7 @@ func (s *Stream) RecvFileBMessage() ([]byte, *fileinfo.FileInfo, io.Reader, erro
 		return nil, nil, nil, err
 	}
 	if header.RequestType != pb.RequestType_FILE_BMESSAGE {
-		return nil, nil, nil, fmt.Errorf("request type is not FileBMessage")
+		return nil, nil, nil, errors.New("request type is not FileBMessage")
 	}
 
 	message, err := ReadMessage(s)
@@ -294,7 +295,7 @@ func WriteFile(s *Stream, filePath string) error {
 		return err
 	}
 	if n != len(buf) {
-		return fmt.Errorf("write size is not equal to buf size")
+		return errors.New("write size is not equal to buf size")
 	}
 	if s.logLevel <= qpLog.INFO {
 		log.Println("quics-protocol: ", "sent", n, "bytes")
@@ -308,7 +309,7 @@ func WriteFile(s *Stream, filePath string) error {
 			return err
 		}
 		if num != osFileInfo.Size() {
-			return fmt.Errorf("write size is not equal to file size")
+			return errors.New("write size is not equal to file size")
 		}
 		if s.logLevel <= qpLog.INFO {
 			log.Println("quics-protocol: ", "sent", num, "bytes")
@@ -321,7 +322,7 @@ func WriteFile(s *Stream, filePath string) error {
 		return err
 	}
 
-	if osFileInfo.ModTime() != afterFileInfo.ModTime() || osFileInfo.Size() != afterFileInfo.Size() || osFileInfo.Mode() != afterFileInfo.Mode() {
+	if qpFileInfo.ModTime != afterFileInfo.ModTime() || qpFileInfo.Size != afterFileInfo.Size() || qpFileInfo.Mode != afterFileInfo.Mode() {
 		return qpErr.ErrFileModifiedDuringTransfer
 	}
 	return nil
@@ -369,7 +370,7 @@ func ReadHeader(s *Stream) (*pb.Header, error) {
 		return nil, err
 	}
 	if n != 2 {
-		return nil, fmt.Errorf("header size is not 2 bytes")
+		return nil, errors.New("header size is not 2 bytes")
 	}
 	headerSize := uint16(binary.BigEndian.Uint16(headerSizeBuf))
 	headerBuf := make([]byte, headerSize)
@@ -404,7 +405,7 @@ func ReadMessage(s *Stream) ([]byte, error) {
 		return nil, err
 	}
 	if n != 4 {
-		return nil, fmt.Errorf("message size is not 4 bytes")
+		return nil, errors.New("message size is not 4 bytes")
 	}
 
 	messageSize := uint32(binary.BigEndian.Uint32(messageSizeBuf))
@@ -434,7 +435,7 @@ func ReadFile(s *Stream) (*fileinfo.FileInfo, io.Reader, error) {
 		return nil, nil, err
 	}
 	if n != 2 {
-		return nil, nil, fmt.Errorf("file info size is not 2 bytes")
+		return nil, nil, errors.New("file info size is not 2 bytes")
 	}
 	fileInfoSize := uint16(binary.BigEndian.Uint16(fileInfoSizeBuf))
 
@@ -480,7 +481,7 @@ func ReadTransaction(s *Stream) (*pb.Transaction, error) {
 		return nil, err
 	}
 	if n != 2 {
-		return nil, fmt.Errorf("transaction size is not 2 bytes")
+		return nil, errors.New("transaction size is not 2 bytes")
 	}
 	transactionSize := uint16(binary.BigEndian.Uint16(transactionSizeBuf))
 

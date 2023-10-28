@@ -2,7 +2,7 @@ package connection
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/google/uuid"
 	"github.com/quic-go/quic-go"
@@ -21,10 +21,10 @@ type Connection struct {
 // So, you may don't need to use it directly.
 func New(logLevel int, conn quic.Connection) (*Connection, error) {
 	if conn == nil {
-		return nil, fmt.Errorf("conn is nil")
+		return nil, errors.New("conn is nil")
 	}
 	if !conn.ConnectionState().TLS.HandshakeComplete {
-		return nil, fmt.Errorf("TLS handshake is not completed")
+		return nil, errors.New("TLS handshake is not completed")
 	}
 
 	return &Connection{
@@ -35,6 +35,9 @@ func New(logLevel int, conn quic.Connection) (*Connection, error) {
 
 // Close closes the connection.
 func (c *Connection) Close() error {
+	if c == nil || c.Conn == nil {
+		return errors.New("connection instance is nil")
+	}
 	err := c.Conn.CloseWithError(0, "Connection closed by peer")
 	if err != nil {
 		return err
@@ -44,6 +47,9 @@ func (c *Connection) Close() error {
 
 // CloseWithError closes the connection with an error message.
 func (c *Connection) CloseWithError(message string) error {
+	if c == nil || c.Conn == nil {
+		return errors.New("connection instance is nil")
+	}
 	err := c.Conn.CloseWithError(0, message)
 	if err != nil {
 		return err
@@ -58,6 +64,10 @@ func (c *Connection) CloseWithError(message string) error {
 // The stream, transaction name, and transaction id are passed as parameters.
 // The stream is used to send and receive messages and files.
 func (c *Connection) OpenTransaction(transactionName string, transactionFunc func(stream *qpStream.Stream, transactionName string, transactionID []byte) error) error {
+	if c == nil || c.Conn == nil {
+		return errors.New("connection instance is nil")
+	}
+
 	stream, err := c.Conn.OpenStreamSync(context.Background())
 	if err != nil {
 		return err
@@ -116,17 +126,17 @@ func TransactionHandshake(stream *qpStream.Stream, transactionName string, trans
 		return err
 	}
 	if header.RequestType != pb.RequestType_TRANSACTION {
-		return fmt.Errorf("quics-protocol: Not transaction type")
+		return errors.New("quics-protocol: Not transaction type")
 	}
 	transaction, err := qpStream.ReadTransaction(stream)
 	if err != nil {
 		return err
 	}
 	if transaction.TransactionName != transactionName {
-		return fmt.Errorf("quics-protocol: Transaction name is not matched")
+		return errors.New("quics-protocol: Transaction name is not matched")
 	}
 	if string(transaction.TransactionID) != string(transactionID) {
-		return fmt.Errorf("quics-protocol: Transaction ID is not matched")
+		return errors.New("quics-protocol: Transaction ID is not matched")
 	}
 	return nil
 }
@@ -140,7 +150,7 @@ func RecvTransactionHandshake(stream *qpStream.Stream) (*pb.Transaction, error) 
 		return nil, err
 	}
 	if header.RequestType != pb.RequestType_TRANSACTION {
-		return nil, fmt.Errorf("quics-protocol: Not transaction type")
+		return nil, errors.New("quics-protocol: Not transaction type")
 	}
 	transaction, err := qpStream.ReadTransaction(stream)
 	if err != nil {
