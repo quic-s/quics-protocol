@@ -54,7 +54,7 @@ func (q *QP) Dial(host string, port int, tlsConf *tls.Config) (*Connection, erro
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
 
-	udpConn, err := net.ListenUDP("udp6", nil)
+	udpConn, err := net.ListenUDP("udp", nil)
 	if err != nil {
 		return nil, err
 	}
