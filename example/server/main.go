@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"log"
-	"net"
 
 	qp "github.com/quic-s/quics-protocol"
 )
@@ -65,7 +64,11 @@ func main() {
 		NextProtos:   []string{"quics-protocol"},
 	}
 	// start server
-	quicServer.Listen(&net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 18080}, tlsConf, func(conn *qp.Connection) {
+	err = quicServer.Listen(":18080", tlsConf, func(conn *qp.Connection) {
 		log.Println("quics-server: ", "new connection ", conn.Conn.RemoteAddr().String())
 	})
+	if err != nil {
+		log.Println("quics-server: ", err)
+		return
+	}
 }

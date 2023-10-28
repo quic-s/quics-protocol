@@ -3,6 +3,7 @@ package qp
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"log"
 	"net"
 	"time"
@@ -48,17 +49,36 @@ func New(logLevel int) (*QP, error) {
 // Dial connects to the address addr on the named network net with TLS configuration tlsConf.
 // Return connection instance and error.
 // Need to set receive handler using RecvTransactionHandleFunc method before dialing.
-func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error) {
+func (q *QP) Dial(host string, port int, tlsConf *tls.Config) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
 
-	udpConn, err := net.ListenUDP("udp", nil)
+	udpConn, err := net.ListenUDP("udp6", nil)
 	if err != nil {
 		return nil, err
 	}
 
 	q.ctx, q.cancel = context.WithTimeout(q.ctx, 10*time.Second)
+
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) < 1 {
+		return nil, errors.New("wrong domain name")
+	}
+	if q.logLevel <= LOG_LEVEL_INFO {
+		log.Println("quics-protocol: looked up ips ", ips)
+	}
+
+	address := &net.UDPAddr{
+		IP:   ips[0],
+		Port: port,
+	}
+	if q.logLevel <= LOG_LEVEL_INFO {
+		log.Println("quics-protocol: dial to ", address)
+	}
 
 	conn, err := quic.Dial(q.ctx, udpConn, address, tlsConf, q.quicConf)
 	if err != nil {
@@ -85,7 +105,7 @@ func (q *QP) Dial(address *net.UDPAddr, tlsConf *tls.Config) (*Connection, error
 // This method is paired with ListenWithTransaction. So, you must use ListenWithTransaction on the server side.
 // Return connection instance and error.
 // Need to set receive handler using RecvTransactionHandleFunc before dialing.
-func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, transactionName string, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error) (*Connection, error) {
+func (q *QP) DialWithTransaction(host string, port int, tlsConf *tls.Config, transactionName string, transactionFunc func(stream *Stream, transactionName string, transactionID []byte) error) (*Connection, error) {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
@@ -96,6 +116,25 @@ func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, tran
 	}
 
 	q.ctx, q.cancel = context.WithTimeout(q.ctx, 10*time.Second)
+
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) < 1 {
+		return nil, errors.New("wrong domain name")
+	}
+	if q.logLevel <= LOG_LEVEL_INFO {
+		log.Println("quics-protocol: looked up ips ", ips)
+	}
+
+	address := &net.UDPAddr{
+		IP:   ips[0],
+		Port: port,
+	}
+	if q.logLevel <= LOG_LEVEL_INFO {
+		log.Println("quics-protocol: dial to ", address)
+	}
 
 	conn, err := quic.Dial(q.ctx, udpConn, address, tlsConf, q.quicConf)
 	if err != nil {
@@ -119,12 +158,17 @@ func (q *QP) DialWithTransaction(address *net.UDPAddr, tlsConf *tls.Config, tran
 // Listen starts a server listening for incoming connections on the UDP address addr with TLS configuration tlsConf.
 // Return error.
 // Need to set receive handler using RecvTransactionHandleFunc method before listening.
-func (q *QP) Listen(address *net.UDPAddr, tlsConf *tls.Config, connHandler func(conn *Connection)) error {
+func (q *QP) Listen(address string, tlsConf *tls.Config, connHandler func(conn *Connection)) error {
 	if q.logLevel == LOG_LEVEL_DEBUG {
 		q.quicConf.Tracer = qpLog.NewQLogTracer()
 	}
 
-	udpConn, err := net.ListenUDP("udp", address)
+	udpAddr, err := net.ResolveUDPAddr("udp6", address)
+	if err != nil {
+		return err
+	}
+
+	udpConn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return err
 	}
