@@ -45,6 +45,7 @@ func (s *Stream) Close() error {
 	if s == nil || s.Stream == nil {
 		return errors.New("stream is nil")
 	}
+	s.Stream.CancelRead(0)
 	err := s.Stream.Close()
 	if err != nil {
 		return err

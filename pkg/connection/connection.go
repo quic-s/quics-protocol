@@ -75,33 +75,25 @@ func (c *Connection) OpenTransaction(transactionName string, transactionFunc fun
 	newStream, err := qpStream.New(c.logLevel, stream)
 	if err != nil {
 		newStream.SendError(err.Error())
-		newStream.Close()
 		return err
 	}
+	defer newStream.Close()
 
 	transactionID, err := uuid.New().MarshalBinary()
 	if err != nil {
 		newStream.SendError(err.Error())
-		newStream.Close()
 		return err
 	}
 
 	err = TransactionHandshake(newStream, transactionName, transactionID)
 	if err != nil {
 		newStream.SendError(err.Error())
-		newStream.Close()
 		return err
 	}
 
 	err = transactionFunc(newStream, transactionName, transactionID)
 	if err != nil {
 		newStream.SendError(err.Error())
-		newStream.Close()
-		return err
-	}
-
-	err = newStream.Close()
-	if err != nil {
 		return err
 	}
 

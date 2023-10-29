@@ -43,13 +43,7 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 			return err
 		}
 		go func() {
-			defer func() {
-				err = stream.Close()
-				if err != nil {
-					log.Println("quics-protocol: ", err)
-				}
-			}()
-
+			defer stream.Close()
 			transaction, err := qpConn.RecvTransactionHandshake(stream)
 			if err != nil {
 				log.Println("quics-protocol: ", err)
