@@ -544,7 +544,7 @@ Google's protobuf library is used to design protocol data. The protocol data str
 message Header {
     RequestType requestType = 1;
     bytes requestId = 2;
-	string error = 3;
+    string error = 3;
 }
 
 enum RequestType {
