@@ -84,6 +84,7 @@ func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) err
 		if err != nil {
 			return err
 		}
+		defer file.Close()
 
 		// Set file metadata.
 		err = file.Chmod(f.Mode)
@@ -119,6 +120,7 @@ func (f *FileInfo) WriteFileWithInfo(filePath string, fileContent io.Reader) err
 			return err
 		}
 	}
+	defer file.Close()
 
 	// Write file content.
 	n, err := io.Copy(file, fileContent)
