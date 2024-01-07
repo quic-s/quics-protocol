@@ -6,7 +6,6 @@ import (
 	"log"
 	"sync"
 	"testing"
-	"time"
 
 	qp "github.com/quic-s/quics-protocol"
 )
@@ -15,51 +14,52 @@ var wg = sync.WaitGroup{}
 
 func TestServerClient(t *testing.T) {
 	// initialize and run server
-	wg.Add(2)
+	wg.Add(1)
 	quicServer, err := runServer(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer wg.Wait()
 
+	// initialize client
+	quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
+	if err != nil {
+		log.Println("quics-client: ", err)
+	}
+
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"quics-protocol"},
+	}
+	// start client
+	conn, err := quicClient.DialWithTransaction("localhost", 18080, tlsConf, "initial", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+		data, err := stream.RecvBMessage()
+		if err != nil {
+			log.Println("quics-client: ", err)
+			return err
+		}
+		log.Println("quics-client: ", "recv message from server")
+		log.Println("quics-client: ", "message: ", string(data))
+		if string(data) != "send initial message" {
+			log.Println("quics-client: Recieved message is not inteded message.")
+			return err
+		}
+
+		err = stream.SendBMessage([]byte("return initial message"))
+		if err != nil {
+			log.Println("quics-client: ", err)
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Println("quics-client: ", err)
+	}
+
 	wg.Add(1)
 	t.Run("Send Message to Server", func(t *testing.T) {
 		defer wg.Done()
-		// initialize client
-		quicClient, err := qp.New(qp.LOG_LEVEL_INFO)
-		if err != nil {
-			log.Println("quics-client: ", err)
-		}
-
-		tlsConf := &tls.Config{
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"quics-protocol"},
-		}
-		// start client
-		conn, err := quicClient.DialWithTransaction("localhost", 18080, tlsConf, "test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
-			data, err := stream.RecvBMessage()
-			if err != nil {
-				log.Println("quics-client: ", err)
-				return err
-			}
-			log.Println("quics-client: ", "recv message from client")
-			log.Println("quics-client: ", "message: ", string(data))
-			if string(data) != "send message" {
-				log.Println("quics-client: Recieved message is not inteded message.")
-				return err
-			}
-
-			err = stream.SendBMessage([]byte("return message"))
-			if err != nil {
-				log.Println("quics-client: ", err)
-				return err
-			}
-			return nil
-		})
-
-		if err != nil {
-			log.Println("quics-client: ", err)
-		}
 
 		// open transaction
 		err = conn.OpenTransaction("test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
@@ -97,12 +97,39 @@ func TestServerClient(t *testing.T) {
 		if err != nil {
 			log.Println("quics-client: ", err)
 		}
-
-		// wait for all stream is sent to server
-		time.Sleep(3 * time.Second)
-		conn.Close()
 	})
 
+	wg.Add(1)
+	t.Run("Test repeatedly", func(t *testing.T) {
+		defer wg.Done()
+
+		for i := 0; i < 150; i++ {
+			log.Println("count: ", i)
+			// open transaction
+			err = conn.OpenTransaction("repeat-test", func(stream *qp.Stream, transactionName string, transactionID []byte) error {
+				err := stream.SendBMessage([]byte("send message"))
+				if err != nil {
+					log.Println("quics-client: ", err)
+					return err
+				}
+
+				data, err := stream.RecvBMessage()
+				if err != nil {
+					log.Println("quics-client: ", err)
+					return err
+				}
+				if string(data) != "return message" {
+					return fmt.Errorf("quics-client: Received message is not the intended message.")
+				}
+
+				return nil
+			})
+			if err != nil {
+				log.Println("quics-client: ", err)
+			}
+		}
+	})
+	conn.Close()
 	quicServer.Close()
 }
 
@@ -112,8 +139,8 @@ func runServer(t *testing.T) (*qp.QP, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	err = quicServer.RecvTransactionHandleFunc("test", func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) error {
-		defer wg.Done()
 		log.Println("quics-server: ", "message received ", conn.Conn.RemoteAddr().String())
 
 		data, err := stream.RecvBMessage()
@@ -153,6 +180,33 @@ func runServer(t *testing.T) (*qp.QP, error) {
 		return nil, err
 	}
 
+	err = quicServer.RecvTransactionHandleFunc("repeat-test", func(conn *qp.Connection, stream *qp.Stream, transactionName string, transactionID []byte) error {
+		log.Println("quics-server: ", "message received ", conn.Conn.RemoteAddr().String())
+
+		data, err := stream.RecvBMessage()
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return err
+		}
+		log.Println("quics-server: ", "recv message from client")
+		log.Println("quics-server: ", "message: ", string(data))
+		if string(data) != "send message" {
+			log.Println("quics-server: Recieved message is not inteded message.")
+			return err
+		}
+
+		err = stream.SendBMessage([]byte("return message"))
+		if err != nil {
+			log.Println("quics-server: ", err)
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	go func() {
 		defer wg.Done()
 
@@ -171,7 +225,7 @@ func runServer(t *testing.T) (*qp.QP, error) {
 			log.Println("quics-server: ", "transactionName: ", transactionName)
 			log.Println("quics-server: ", "transactionID: ", string(transactionID))
 
-			err := stream.SendBMessage([]byte("send message"))
+			err := stream.SendBMessage([]byte("send initial message"))
 			if err != nil {
 				log.Println("quics-server: ", err)
 				return err
@@ -184,7 +238,7 @@ func runServer(t *testing.T) (*qp.QP, error) {
 			}
 			log.Println("quics-server: ", "recv message from client")
 			log.Println("quics-server: ", "message: ", string(data))
-			if string(data) != "return message" {
+			if string(data) != "return initial message" {
 				return fmt.Errorf("quics-server: Received message is not the intended message.")
 			}
 			return nil

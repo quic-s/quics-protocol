@@ -57,7 +57,7 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 				log.Println("quics-protocol: ", "handler for transaction ", transaction.TransactionName, " is not set. Use 'default' handler.")
 				err = h.transactionHandler["default"](conn, stream, transaction.TransactionName, transaction.TransactionID)
 				if err != nil {
-					log.Println("quics-protocol: ", err)
+					log.Println("quics-protocol: err from transactionHandler [", transaction.TransactionName, "] : ", err)
 					if h.errChan != nil {
 						h.errChan <- err
 					}
@@ -69,7 +69,7 @@ func (h *Handler) RouteTransaction(conn *qpConn.Connection) error {
 			} else {
 				err = h.transactionHandler[transaction.TransactionName](conn, stream, transaction.TransactionName, transaction.TransactionID)
 				if err != nil {
-					log.Println("quics-protocol: ", err)
+					log.Println("quics-protocol: err from transactionHandler [", transaction.TransactionName, "] : ", err)
 					if h.errChan != nil {
 						h.errChan <- err
 					}
